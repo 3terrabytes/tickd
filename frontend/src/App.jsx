@@ -21,7 +21,7 @@ function Layout({ children }) {
               Quests
             </NavLink>
             <NavLink to="/friends" style={({ isActive }) => ({ ...styles.navLink, ...(isActive ? styles.navLinkActive : {}) })}>
-              Guild
+              Friends
             </NavLink>
           </nav>
           <button className="btn btn-ghost" style={{ padding: '8px 14px', fontSize: 13 }} onClick={logout}>
