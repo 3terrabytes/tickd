@@ -14,7 +14,7 @@ function Layout({ children }) {
         <div style={styles.headerInner}>
           <div style={styles.brand}>
             <span style={styles.brandIcon}>⚔️</span>
-            <span style={styles.brandName}>HabitLoop</span>
+            <span style={styles.brandName}>Tickd</span>
           </div>
           <nav style={styles.nav}>
             <NavLink to="/" end style={({ isActive }) => ({ ...styles.navLink, ...(isActive ? styles.navLinkActive : {}) })}>
