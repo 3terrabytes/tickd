@@ -252,10 +252,7 @@ function HabitCard({ habit, onComplete, onDelete }) {
       )}
     </div>
   );
-}
 
-// XP util exposed here too for convenience
-}
 
 const styles = {
   wrap: { display: 'flex', flexDirection: 'column', gap: 16, paddingBottom: 32 },
