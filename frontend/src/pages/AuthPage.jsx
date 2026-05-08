@@ -47,7 +47,7 @@ export default function AuthPage() {
       <div style={styles.card} className="animate-fade">
         <div style={styles.logo}>
           <div style={styles.logoIcon}>⚔️</div>
-          <h1 style={styles.title}>HabitLoop</h1>
+          <h1 style={styles.title}>Tickd</h1>
           <p style={styles.sub}>Level up your life, one habit at a time</p>
         </div>
 
