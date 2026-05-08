@@ -50,9 +50,9 @@ cron.schedule('0 8 * * 1', async () => {
     const pct = Math.round((totalCompletions / totalPossible) * 100);
 
     await transporter.sendMail({
-      from: `HabitLoop <${process.env.SMTP_USER}>`,
+      from: `Tickd <${process.env.SMTP_USER}>`,
       to: user.email,
-      subject: `⚔️ Your weekly HabitLoop report — Level ${user.level}`,
+      subject: `⚔️ Your weekly Tickd report — Level ${user.level}`,
       text: `Hey ${user.username}!\n\nYour week: ${pct}% completion rate\n\n${habitLines}\n\nKeep it up — your streak depends on it! 🏆\n\nhttps://${process.env.APP_URL}`
     });
   }
@@ -62,5 +62,5 @@ cron.schedule('0 8 * * 1', async () => {
 
 const PORT = process.env.PORT || 3001;
 initDB().then(() => {
-  app.listen(PORT, () => console.log(`🚀 HabitLoop backend on :${PORT}`));
+  app.listen(PORT, () => console.log(`🚀 Tickd backend on :${PORT}`));
 });
