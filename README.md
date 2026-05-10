@@ -2,6 +2,8 @@
 
 > Level up your life, one habit at a time. A gamified habit tracker with XP, levels, streaks, friends, and weekly email reports.
 
+tickd.oscarh.co.uk
+
 ## Features
 
 - **🔐 Auth** — Sign up / log in with JWT, persistent sessions
