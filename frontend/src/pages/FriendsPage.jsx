@@ -305,22 +305,6 @@ function NameWithBanner({ user }) {
   );
 }
 
-({ player, rank }) {
-  const medals = ['🥇','🥈','🥉'];
-  const xpNext = xpForLevel(player.level + 1);
-  const xpPrev = Math.floor(100 * Math.pow(player.level, 1.5));
-  const pct = Math.min(((player.xp - xpPrev) / (xpNext - xpPrev)) * 100, 100);
-  const banner = player.equipped?.banner;
-  const badge  = player.equipped?.badge;
-  const weapon = player.equipped?.weapon;
-
-  return (
-    <div style={{
-      display:'flex', alignItems:'center', gap:12, padding:'10px 16px',
-      background:'var(--bg2)',
-      border:`1px solid ${player.isSelf ? 'var(--accent)' : 'var(--border)'}`,
-      borderRadius:12, position:'relative', overflow:'hidden'
-    }}>
       {banner && <div style={{ position:'absolute', inset:0, background:banner.color, opacity:0.12 }}/>}
       <div style={{ fontSize:20, width:28, textAlign:'center', zIndex:1 }}>
         {rank <= 3 ? medals[rank-1] : <span style={{ color:'var(--text-muted)', fontSize:14 }}>#{rank}</span>}
