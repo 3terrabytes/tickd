@@ -22,10 +22,11 @@ cron.schedule('0 8 * * 1', async () => {
   if (!process.env.SMTP_HOST) return;
 
   const transporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
-    port: process.env.SMTP_PORT || 587,
-    auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
-  });
+  host: process.env.SMTP_HOST,
+  port: 465,
+  secure: true,
+  auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
+});
 
   const { rows: users } = await pool.query('SELECT id, email, username, level, xp FROM users');
 
