@@ -62,6 +62,20 @@ cron.schedule('0 8 * * 1', async () => {
   console.log('✅ Weekly emails sent');
 });
 
+app.get('/api/test-email', async (req, res) => {
+  const transporter = nodemailer.createTransport({
+    host: process.env.SMTP_HOST,
+    port: process.env.SMTP_PORT || 587,
+    auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
+  });
+  await transporter.sendMail({
+    from: `Tickd <${process.env.SMTP_USER}>`,
+    to: process.env.SMTP_USER,
+    subject: 'Tickd test email',
+    text: 'If you got this, emails are working!'
+  });
+  res.json({ sent: true });
+});
 const PORT = process.env.PORT || 3001;
 initDB().then(() => {
   app.listen(PORT, () => console.log(`🚀 Tickd backend on :${PORT}`));
