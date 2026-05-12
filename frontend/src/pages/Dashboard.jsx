@@ -15,14 +15,16 @@ const GOLD_OPTIONS = [
 export default function Dashboard() {
   const { user, refreshUser } = useAuth();
   const [habits, setHabits] = useState([]);
+  const [equipped, setEquipped] = useState({});
   const [showAdd, setShowAdd] = useState(false);
   const [newHabit, setNewHabit] = useState({ name: '', icon: '⚡', color: '#6366f1', gold_reward: 10 });
   const [floats, setFloats] = useState([]);
   const [levelUp, setLevelUp] = useState(null);
 
   const load = useCallback(async () => {
-    const data = await api.habits.list();
+    const [data, inv] = await Promise.all([api.habits.list(), api.avatar.inventory()]);
     setHabits(data);
+    setEquipped(inv.equipped || {});
   }, []);
 
   useEffect(() => { load(); }, [load]);
@@ -85,7 +87,7 @@ export default function Dashboard() {
 
       <div style={styles.playerCard} className="card">
         <div style={styles.playerRow}>
-          <PixelCharacter equipped={{}} appearance={user||{}} size={80}/>
+          <PixelCharacter equipped={equipped} appearance={user||{}} size={80}/>
           <div style={{ flex: 1 }}>
             <div style={styles.playerName}>{user?.username}</div>
             <div style={styles.playerTitle}>
