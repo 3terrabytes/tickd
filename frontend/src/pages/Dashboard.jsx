@@ -255,11 +255,6 @@ function HabitCard({ habit, onComplete, onDelete }) {
   );
 }
 
-// XP util exposed here too for convenience
-function levelTitle(level) {
-  const titles = ['','Rookie','Apprentice','Explorer','Achiever','Challenger','Warrior','Champion','Master','Grandmaster','Legend'];
-  return titles[Math.min(level, titles.length - 1)];
-}
 
 const styles = {
   wrap: { display: 'flex', flexDirection: 'column', gap: 16, paddingBottom: 32 },
