@@ -1,4 +1,4 @@
-# ⚔️ Tickd
+# ⚔️ HabitQuest
 
 > Level up your life, one habit at a time. A gamified habit tracker with XP, levels, streaks, friends, and weekly email reports.
 
@@ -81,7 +81,7 @@ npm start
 **Frontend:**
 1. New → Static Site → Connect repo → Root dir: `frontend`
 2. Build: `npm install && npm run build` | Publish: `build`
-3. Add env var: `REACT_APP_API_URL` = your backend URL (e.g. `https://tickd-api.onrender.com`)
+3. Add env var: `REACT_APP_API_URL` = your backend URL (e.g. `https://habitquest-api.onrender.com`)
 4. Add rewrite rule: `/*` → `/index.html`
 
 ## Optional: Weekly Emails
@@ -101,7 +101,7 @@ Emails fire every Monday at 8am server time.
 ## Project Structure
 
 ```
-tickd/
+habitquest/
 ├── backend/
 │   └── src/
 │       ├── db/index.js          # DB connection + schema init
