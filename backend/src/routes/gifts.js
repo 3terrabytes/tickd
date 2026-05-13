@@ -2,6 +2,7 @@ const express = require('express');
 const { pool } = require('../db');
 const auth = require('../middleware/auth');
 const { itemById } = require('../data/items');
+const { addXP } = require('../utils/xp');
 const router = express.Router();
 
 router.use(auth);
@@ -56,7 +57,12 @@ router.post('/send', async (req, res) => {
     [req.userId, receiver_id, item_id, message || null, 'delivered']
   );
 
-  res.json({ success: true });
+  // Award XP to sender for generosity
+  const GIFT_XP = { common: 10, rare: 25, epic: 50, legendary: 100 };
+  const xpGain = GIFT_XP[item.rarity] || 10;
+  await addXP(req.userId, xpGain);
+
+  res.json({ success: true, xp_gained: xpGain });
 });
 
 // Get gift history (sent + received)
