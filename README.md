@@ -1,26 +1,34 @@
-# ⚔️ HabitQuest
+# ⚔️ Tickd
 
-> Level up your life, one habit at a time. A gamified habit tracker with XP, levels, streaks, friends, and weekly email reports.
+> Level up your life, one habit at a time. A gamified habit tracker with XP, levels, streaks, a pixel avatar, an item shop, friends, gifting, and more.
 
 ## Features
 
 - **🔐 Auth** — Sign up / log in with JWT, persistent sessions
 - **✅ Habit Tracking** — Add habits with custom icons & colors, check off daily
-- **⚡ XP & Levels** — Earn XP for every completion; streaks give bonus XP
+- **⚡ XP & Levels** — Earn XP for every completion; streaks multiply your rewards
+- **🪙 Gold** — Earn gold alongside XP; spend it in the shop
 - **🔥 Streaks** — Daily streaks tracked automatically, broken if you skip a day
+- **🧙 Pixel Avatar** — Customise skin, hair, eyes, style, and gender; equip gear from the shop
+- **🛒 Item Shop** — Buy weapons, armour, banners, and badges with gold
+- **🎁 Gifting & Trading** — Send items to friends or propose item-for-item trades
+- **👥 Friends** — Search players, send/accept requests, view public profiles
 - **🏆 Leaderboard** — See your friends ranked by XP
-- **👥 Friends** — Search players, send/accept requests, view their progress
-- **📧 Weekly Emails** — Cron job sends Monday morning summaries (optional)
+- **🔒 Privacy Controls** — Per-field visibility: XP, streaks, and habits can each be set to Everyone / Friends Only / Private
+- **🎨 Themes** — Seven colour themes (Default, Midnight, Forest, Rose, Ocean, Sunset, Mono)
+- **🔔 Push Notifications** — Optional daily reminder via service worker at a time you choose
+- **💡 Suggestions** — Submit and upvote feature ideas in-app
+- **📧 Weekly Emails** — Cron job sends Monday morning habit summaries (optional)
 
-## XP System
+## XP & Gold System
 
-| Streak Length | XP per completion |
-|--------------|-------------------|
-| 0–2 days     | 10 XP             |
-| 3–6 days     | 15 XP (+5 bonus)  |
-| 7–13 days    | 20 XP (+10 bonus) |
-| 14–29 days   | 25 XP (+15 bonus) |
-| 30+ days     | 35 XP (+25 bonus) |
+| Streak Length | XP per completion | Gold per completion |
+|--------------|-------------------|---------------------|
+| 0–2 days     | 10 XP             | 10 gold             |
+| 3–6 days     | 15 XP (+5 bonus)  | 15 gold             |
+| 7–13 days    | 20 XP (+10 bonus) | 20 gold             |
+| 14–29 days   | 25 XP (+15 bonus) | 25 gold             |
+| 30+ days     | 35 XP (+25 bonus) | 35 gold             |
 
 Levels scale quadratically: XP needed = `100 × level^1.5`
 
@@ -81,7 +89,7 @@ npm start
 **Frontend:**
 1. New → Static Site → Connect repo → Root dir: `frontend`
 2. Build: `npm install && npm run build` | Publish: `build`
-3. Add env var: `REACT_APP_API_URL` = your backend URL (e.g. `https://habitquest-api.onrender.com`)
+3. Add env var: `REACT_APP_API_URL` = your backend URL (e.g. `https://tickd-api.onrender.com`)
 4. Add rewrite rule: `/*` → `/index.html`
 
 ## Optional: Weekly Emails
@@ -101,26 +109,42 @@ Emails fire every Monday at 8am server time.
 ## Project Structure
 
 ```
-habitquest/
+tickd/
 ├── backend/
 │   └── src/
-│       ├── db/index.js          # DB connection + schema init
-│       ├── middleware/auth.js   # JWT middleware
+│       ├── db/index.js            # DB connection + schema init
+│       ├── middleware/auth.js     # JWT middleware
 │       ├── routes/
-│       │   ├── auth.js          # Register, login, /me
-│       │   ├── habits.js        # CRUD + complete/uncomplete
-│       │   └── friends.js       # Search, request, accept, leaderboard
-│       ├── utils/xp.js          # XP & level math
-│       └── index.js             # Server + cron job
+│       │   ├── auth.js            # Register, login, /me
+│       │   ├── habits.js          # CRUD + complete/uncomplete
+│       │   ├── friends.js         # Search, request, accept, leaderboard
+│       │   ├── shop.js            # Avatar shop + inventory + equip
+│       │   ├── gifts.js           # Send, receive, trade items
+│       │   ├── profile.js         # Public profile lookup
+│       │   ├── settings.js        # Privacy, theme, notifications
+│       │   └── suggestions.js     # Community feature requests + votes
+│       ├── data/items.js          # Shop item definitions
+│       ├── utils/xp.js            # XP & level math
+│       └── index.js               # Server entry + cron job
 ├── frontend/
 │   └── src/
 │       ├── context/AuthContext.jsx
+│       ├── components/
+│       │   ├── PixelCharacter.jsx  # SVG avatar renderer
+│       │   └── UpdateModal.jsx     # Changelog modal
 │       ├── pages/
 │       │   ├── AuthPage.jsx
 │       │   ├── Dashboard.jsx
-│       │   └── FriendsPage.jsx
-│       ├── utils/xp.js
+│       │   ├── AvatarPage.jsx
+│       │   ├── FriendsPage.jsx
+│       │   ├── ProfilePage.jsx
+│       │   ├── SettingsPage.jsx
+│       │   └── SuggestionsPage.jsx
+│       ├── utils/
+│       │   ├── themes.js           # Theme definitions + applyTheme()
+│       │   └── xp.js
 │       ├── api.js
 │       └── App.jsx
-└── render.yaml
+├── render.yaml
+└── package.json
 ```
