@@ -1,72 +1,126 @@
-require('dotenv').config();
-const express = require('express');
-const cors = require('cors');
-const cron = require('node-cron');
-const nodemailer = require('nodemailer');
-const { initDB, pool } = require('./db');
+const { Pool } = require('pg');
 
-const app = express();
-app.use(cors());
-app.use(express.json());
-
-app.use('/api/auth', require('./routes/auth'));
-app.use('/api/habits', require('./routes/habits'));
-app.use('/api/friends', require('./routes/friends'));
-app.use('/api/avatar', require('./routes/shop'));
-app.use('/api/gifts', require('./routes/gifts'));
-app.use('/api/suggestions', require('./routes/suggestions'));
-app.use('/api/settings', require('./routes/settings'));
-app.use('/api/profile', require('./routes/profile'));
-app.use('/api/admin', require('./routes/admin'));
-
-app.get('/api/health', (_, res) => res.json({ status: 'ok' }));
-
-// Weekly summary emails — every Monday at 8am
-cron.schedule('0 8 * * 1', async () => {
-  if (!process.env.SMTP_HOST) return;
-
-  const transporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
-    port: process.env.SMTP_PORT || 587,
-    auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
-  });
-
-  const { rows: users } = await pool.query('SELECT id, email, username, level, xp FROM users');
-
-  for (const user of users) {
-    const { rows: habits } = await pool.query(`
-      SELECT h.name, h.streak, h.icon,
-        COUNT(l.id) FILTER (
-          WHERE l.completed_date >= NOW() - INTERVAL '7 days'
-        ) AS completions_this_week
-      FROM habits h
-      LEFT JOIN habit_logs l ON l.habit_id = h.id
-      WHERE h.user_id = $1
-      GROUP BY h.id
-    `, [user.id]);
-
-    if (!habits.length) continue;
-
-    const habitLines = habits.map(h =>
-      `${h.icon} ${h.name}: ${h.completions_this_week}/7 days · 🔥 ${h.streak} day streak`
-    ).join('\n');
-
-    const totalCompletions = habits.reduce((s, h) => s + Number(h.completions_this_week), 0);
-    const totalPossible = habits.length * 7;
-    const pct = Math.round((totalCompletions / totalPossible) * 100);
-
-    await transporter.sendMail({
-      from: `HabitQuest <${process.env.SMTP_USER}>`,
-      to: user.email,
-      subject: `⚔️ Your weekly HabitQuest report — Level ${user.level}`,
-      text: `Hey ${user.username}!\n\nYour week: ${pct}% completion rate\n\n${habitLines}\n\nKeep it up — your streak depends on it! 🏆\n\nhttps://${process.env.APP_URL}`
-    });
-  }
-
-  console.log('✅ Weekly emails sent');
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
 });
 
-const PORT = process.env.PORT || 3001;
-initDB().then(() => {
-  app.listen(PORT, () => console.log(`🚀 HabitQuest backend on :${PORT}`));
-});
+const initDB = async () => {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS users (
+      id SERIAL PRIMARY KEY,
+      username VARCHAR(50) UNIQUE NOT NULL,
+      email VARCHAR(255) UNIQUE NOT NULL,
+      password_hash VARCHAR(255) NOT NULL,
+      xp INTEGER DEFAULT 0,
+      level INTEGER DEFAULT 1,
+      avatar_color VARCHAR(7) DEFAULT '#6366f1',
+      created_at TIMESTAMP DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS habits (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      name VARCHAR(100) NOT NULL,
+      icon VARCHAR(10) DEFAULT '⚡',
+      color VARCHAR(7) DEFAULT '#6366f1',
+      streak INTEGER DEFAULT 0,
+      best_streak INTEGER DEFAULT 0,
+      total_completions INTEGER DEFAULT 0,
+      created_at TIMESTAMP DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS habit_logs (
+      id SERIAL PRIMARY KEY,
+      habit_id INTEGER REFERENCES habits(id) ON DELETE CASCADE,
+      user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      completed_date DATE NOT NULL,
+      xp_earned INTEGER DEFAULT 10,
+      UNIQUE(habit_id, completed_date)
+    );
+
+    CREATE TABLE IF NOT EXISTS friendships (
+      id SERIAL PRIMARY KEY,
+      requester_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      addressee_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      status VARCHAR(20) DEFAULT 'pending',
+      created_at TIMESTAMP DEFAULT NOW(),
+      UNIQUE(requester_id, addressee_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS user_inventory (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      item_id VARCHAR(60) NOT NULL,
+      acquired_at TIMESTAMP DEFAULT NOW(),
+      UNIQUE(user_id, item_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS user_equipped (
+      user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      weapon VARCHAR(60),
+      armor VARCHAR(60),
+      banner VARCHAR(60),
+      badge VARCHAR(60)
+    );
+
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS gold INTEGER DEFAULT 0;
+    ALTER TABLE habits ADD COLUMN IF NOT EXISTS gold_reward INTEGER DEFAULT 10;
+
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_skin    VARCHAR(7)  DEFAULT '#e8b88a';
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_hair    VARCHAR(7)  DEFAULT '#8B4513';
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_eyes    VARCHAR(7)  DEFAULT '#2a4a8a';
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_hair_style INTEGER DEFAULT 0;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_gender  INTEGER DEFAULT 0;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_beard   INTEGER DEFAULT 0;
+
+    CREATE TABLE IF NOT EXISTS gifts (
+      id SERIAL PRIMARY KEY,
+      sender_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      receiver_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      item_id VARCHAR(60) NOT NULL,
+      message VARCHAR(200),
+      status VARCHAR(20) DEFAULT 'pending',
+      created_at TIMESTAMP DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS suggestions (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      username VARCHAR(50),
+      title VARCHAR(200) NOT NULL,
+      description TEXT,
+      votes INTEGER DEFAULT 0,
+      created_at TIMESTAMP DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS suggestion_votes (
+      user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      suggestion_id INTEGER REFERENCES suggestions(id) ON DELETE CASCADE,
+      PRIMARY KEY (user_id, suggestion_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS trades (
+      id SERIAL PRIMARY KEY,
+      proposer_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      receiver_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      offer_item_id VARCHAR(60) NOT NULL,
+      request_item_id VARCHAR(60) NOT NULL,
+      message VARCHAR(200),
+      status VARCHAR(20) DEFAULT 'pending',
+      created_at TIMESTAMP DEFAULT NOW()
+    );
+
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS privacy_xp       TEXT DEFAULT 'friends';
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS privacy_streaks  TEXT DEFAULT 'friends';
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS privacy_habits   TEXT DEFAULT 'friends';
+
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS notif_enabled    BOOLEAN DEFAULT false;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS notif_time       VARCHAR(5) DEFAULT '20:00';
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS theme            TEXT DEFAULT 'default';
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS update_seen      BOOLEAN DEFAULT false;
+  `);
+  console.log('✅ Database initialized');
+};
+
+module.exports = { pool, initDB };
