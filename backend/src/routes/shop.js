@@ -46,10 +46,12 @@ router.get('/inventory', async (req, res) => {
   
   // Resolve equipped slot ids to full item objects
   const equipped = {
-    weapon: equippedRow.weapon ? itemById(equippedRow.weapon) : null,
-    armor:  equippedRow.armor  ? itemById(equippedRow.armor)  : null,
-    banner: equippedRow.banner ? itemById(equippedRow.banner) : null,
-    badge:  equippedRow.badge  ? itemById(equippedRow.badge)  : null,
+    weapon:    equippedRow.weapon    ? itemById(equippedRow.weapon)    : null,
+    armor:     equippedRow.armor     ? itemById(equippedRow.armor)     : null,
+    banner:    equippedRow.banner    ? itemById(equippedRow.banner)    : null,
+    badge:     equippedRow.badge     ? itemById(equippedRow.badge)     : null,
+    companion: equippedRow.companion ? itemById(equippedRow.companion) : null,
+    title:     equippedRow.title     ? itemById(equippedRow.title)     : null,
   };
 
   res.json({ items: inv.map(r => itemById(r.item_id)).filter(Boolean), equipped });
@@ -60,7 +62,7 @@ router.post('/equip/:itemId', async (req, res) => {
   const item = itemById(req.params.itemId);
   if (!item) return res.status(404).json({ error: 'Item not found' });
   
-  const validSlots = ['weapon', 'armor', 'banner', 'badge'];
+  const validSlots = ['weapon', 'armor', 'banner', 'badge', 'companion', 'title'];
   if (!validSlots.includes(item.type)) return res.status(400).json({ error: 'Invalid item type' });
 
   const { rows } = await pool.query(
@@ -82,7 +84,7 @@ router.post('/equip/:itemId', async (req, res) => {
 // Unequip a slot
 router.delete('/equip/:slot', async (req, res) => {
   const slot = req.params.slot;
-  if (!['weapon', 'armor', 'banner', 'badge'].includes(slot))
+  if (!['weapon', 'armor', 'banner', 'badge', 'companion', 'title'].includes(slot))
     return res.status(400).json({ error: 'Invalid slot' });
 
   await pool.query(
@@ -91,6 +93,49 @@ router.delete('/equip/:slot', async (req, res) => {
     [req.userId]
   );
   res.json({ success: true });
+});
+
+// Use a consumable — one-time use, removed from inventory after
+router.post('/use/:itemId', async (req, res) => {
+  const item = itemById(req.params.itemId);
+  if (!item) return res.status(404).json({ error: 'Item not found' });
+  if (item.type !== 'consumable') return res.status(400).json({ error: 'Not a consumable' });
+
+  // Check ownership
+  const { rows } = await pool.query(
+    'SELECT id FROM user_inventory WHERE user_id = $1 AND item_id = $2',
+    [req.userId, item.id]
+  );
+  if (!rows.length) return res.status(403).json({ error: 'Not in inventory' });
+
+  const { addXP } = require('../utils/xp');
+  let result = {};
+
+  if (item.id === 'potion_xp') {
+    await addXP(req.userId, 500);
+    result = { xpGained: 500 };
+  } else if (item.id === 'elixir_gold') {
+    // Grant 3x the user's current daily XP earn rate as bonus gold
+    await pool.query('UPDATE users SET gold = gold + 1000 WHERE id = $1', [req.userId]);
+    result = { goldGained: 1000 };
+  } else if (item.id === 'scroll_streak') {
+    await pool.query('UPDATE users SET streak_shield = true WHERE id = $1', [req.userId]);
+    result = { shieldActive: true };
+  } else if (item.id === 'baguette_stale') {
+    await addXP(req.userId, 1);
+    result = { xpGained: 1, message: 'Stale, but somehow nutritious.' };
+  } else {
+    return res.status(400).json({ error: 'Unknown consumable effect' });
+  }
+
+  // Remove from inventory (one-time use)
+  await pool.query(
+    'DELETE FROM user_inventory WHERE user_id = $1 AND item_id = $2',
+    [req.userId, item.id]
+  );
+
+  const { rows: updated } = await pool.query('SELECT xp, level, gold FROM users WHERE id = $1', [req.userId]);
+  res.json({ success: true, ...result, user: updated[0] });
 });
 
 // Save avatar appearance

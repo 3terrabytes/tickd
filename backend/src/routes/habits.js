@@ -60,12 +60,26 @@ router.post('/:id/complete', async (req, res) => {
     if (!habits.length) return res.status(404).json({ error: 'Habit not found' });
     const habit = habits[0];
 
-    // Check if streak continues (completed yesterday)
+    // Check if streak continues (completed yesterday), with streak shield fallback
     const { rows: yesterday_log } = await pool.query(
       'SELECT id FROM habit_logs WHERE habit_id = $1 AND completed_date = $2',
       [req.params.id, yesterday]
     );
-    const newStreak = yesterday_log.length > 0 ? habit.streak + 1 : 1;
+    let newStreak;
+    if (yesterday_log.length > 0) {
+      newStreak = habit.streak + 1;
+    } else if (habit.streak > 0) {
+      // Streak would break — check for shield
+      const { rows: shieldRows } = await pool.query('SELECT streak_shield FROM users WHERE id = $1', [req.userId]);
+      if (shieldRows[0]?.streak_shield) {
+        await pool.query('UPDATE users SET streak_shield = false WHERE id = $1', [req.userId]);
+        newStreak = habit.streak + 1;
+      } else {
+        newStreak = 1;
+      }
+    } else {
+      newStreak = 1;
+    }
     const xpEarned = calcXP(newStreak);
 
     // Log completion
