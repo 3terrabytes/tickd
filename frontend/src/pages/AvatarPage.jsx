@@ -10,8 +10,8 @@ const RARITY_STYLES = {
   legendary: { color: '#f59e0b', label: 'Legendary', border: '#f59e0b44' },
 };
 
-const SLOT_LABELS = { weapon: '🗡️ Weapon', armor: '🛡️ Armor', banner: '🏷️ Banner', badge: '🎖️ Badge' };
-const TYPES = ['weapon', 'armor', 'banner', 'badge'];
+const SLOT_LABELS = { weapon: '🗡️ Weapon', armor: '🛡️ Armor', banner: '🏷️ Banner', badge: '🎖️ Badge', companion: '🐾 Companion', title: '📛 Title' };
+const TYPES = ['weapon', 'armor', 'banner', 'badge', 'companion', 'title'];
 
 export default function AvatarPage() {
   const { user, refreshUser } = useAuth();
@@ -21,6 +21,8 @@ export default function AvatarPage() {
   const [shopFilter, setShopFilter] = useState('all');
   const [buying, setBuying] = useState(null);
   const [equipping, setEquipping] = useState(null);
+  const [using, setUsing] = useState(null);
+  const [confirmUse, setConfirmUse] = useState(null);
   const [toast, setToast] = useState(null);
 
   const showToast = (msg, type = 'success') => {
@@ -72,6 +74,25 @@ export default function AvatarPage() {
     await load();
   };
 
+  const useItem = async (item) => {
+    if (using) return;
+    setUsing(item.id);
+    setConfirmUse(null);
+    try {
+      const res = await api.avatar.use(item.id);
+      const msg = res.xpGained ? `+${res.xpGained} XP!`
+        : res.goldGained ? `+${res.goldGained} gold!`
+        : res.shieldActive ? 'Streak Shield active!'
+        : res.message || 'Used!';
+      showToast(`${item.name}: ${msg}`);
+      await load();
+    } catch (err) {
+      showToast(err.message, 'error');
+    } finally {
+      setUsing(null);
+    }
+  };
+
   const filteredShop = shopFilter === 'all'
     ? shopData.items
     : shopData.items.filter(i => i.type === shopFilter);
@@ -92,6 +113,25 @@ export default function AvatarPage() {
           padding: '10px 20px', borderRadius: 10, fontWeight: 500, fontSize: 14,
           zIndex: 200, whiteSpace: 'nowrap', boxShadow: '0 4px 20px rgba(0,0,0,0.5)'
         }} className="animate-fade">{toast.msg}</div>
+      )}
+
+      {confirmUse && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 300
+        }}>
+          <div className="card" style={{ padding: 24, maxWidth: 300, width: '90%', textAlign: 'center' }}>
+            <div style={{ fontSize: 40, marginBottom: 8 }}>{confirmUse.emoji}</div>
+            <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 6 }}>{confirmUse.name}</div>
+            <div style={{ color: 'var(--text-muted)', fontSize: 13, marginBottom: 16 }}>
+              This item is one-time use and will be consumed. Are you sure?
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button className="btn btn-ghost" style={{ flex: 1 }} onClick={() => setConfirmUse(null)}>Cancel</button>
+              <button className="btn btn-primary" style={{ flex: 1 }} onClick={() => useItem(confirmUse)}>Use it</button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Gold display */}
@@ -252,7 +292,13 @@ export default function AvatarPage() {
                       <div style={{ fontSize: 11, color: '#a78bfa', marginBottom: 6 }}>✨ {item.magic} Magic</div>
                     )}
                     <div style={{ flex: 1 }} />
-                    {isEquipped ? (
+                    {item.type === 'consumable' ? (
+                      <button className="btn btn-primary" style={{ width: '100%', fontSize: 12, padding: '6px', background: '#b45309', borderColor: '#b45309' }}
+                        disabled={using === item.id}
+                        onClick={() => setConfirmUse(item)}>
+                        {using === item.id ? '...' : '⚡ Use'}
+                      </button>
+                    ) : isEquipped ? (
                       <button className="btn btn-ghost" style={{ width: '100%', fontSize: 12, padding: '6px' }}
                         onClick={() => unequip(item.type)}>Unequip</button>
                     ) : (
