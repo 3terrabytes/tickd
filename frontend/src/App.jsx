@@ -136,7 +136,7 @@ function Footer() {
         3terrabytes/tickd
       </a>
       <span style={{ color: 'var(--border)', fontSize: 13 }}>·</span>
-      <a href="/terms" target="_blank" rel="noopener noreferrer"
+      <a href="/terms"
         style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--text-muted)', fontSize: 13, textDecoration: 'none' }}
         onMouseEnter={e => e.currentTarget.style.color = 'var(--text)'}
         onMouseLeave={e => e.currentTarget.style.color = 'var(--text-muted)'}
