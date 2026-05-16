@@ -1,0 +1,182 @@
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Inter:wght@300;400;500;600&display=swap');
+
+:root {
+  --bg: #0a0a0f;
+  --bg2: #111118;
+  --bg3: #1a1a25;
+  --border: #2a2a3a;
+  --border-bright: #3a3a55;
+  --text: #e8e8f0;
+  --text-muted: #7878a0;
+  --accent: #7c6af7;
+  --accent2: #a78bfa;
+  --gold: #f59e0b;
+  --gold2: #fcd34d;
+  --green: #10b981;
+  --red: #ef4444;
+  --pink: #ec4899;
+  --radius: 12px;
+  --shadow: 0 4px 24px rgba(0,0,0,0.4);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Inter', sans-serif;
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, .font-display {
+  font-family: 'Cinzel', serif;
+  letter-spacing: 0.02em;
+}
+
+button {
+  cursor: pointer;
+  font-family: 'Inter', sans-serif;
+  transition: all 0.15s ease;
+}
+
+input {
+  font-family: 'Inter', sans-serif;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: var(--bg2); }
+::-webkit-scrollbar-thumb { background: var(--border-bright); border-radius: 3px; }
+
+/* Animations */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pop {
+  0%   { transform: scale(1); }
+  50%  { transform: scale(1.15); }
+  100% { transform: scale(1); }
+}
+
+@keyframes xpFloat {
+  0%   { opacity: 1; transform: translateY(0); }
+  100% { opacity: 0; transform: translateY(-40px); }
+}
+
+@keyframes shimmer {
+  0%   { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+
+@keyframes glow {
+  0%, 100% { box-shadow: 0 0 10px var(--accent); }
+  50%       { box-shadow: 0 0 25px var(--accent2), 0 0 50px var(--accent); }
+}
+
+.animate-fade { animation: fadeIn 0.3s ease both; }
+.animate-pop  { animation: pop 0.25s ease; }
+
+/* ── Pet (companion) animations ──────────────────────────────────────────── */
+/* Integer pixel offsets + steps() timing keeps motion crisp inside the
+   pixel-art avatar (imageRendering: pixelated). */
+@keyframes pet-cat-sway {
+  0%, 100% { transform: translateX(0); }
+  50%      { transform: translateX(-1px); }
+}
+@keyframes pet-fox-bounce {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-3px); }
+}
+@keyframes pet-owl-bob {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-2px); }
+}
+@keyframes pet-dragon-hover {
+  0%, 100% { transform: translateY(-1px); filter: drop-shadow(0 0 1px rgba(245, 158, 11, 0.5)); }
+  50%      { transform: translateY(-3px); filter: drop-shadow(0 0 4px rgba(245, 158, 11, 0.8)); }
+}
+@keyframes pet-cheer-pop {
+  0%   { transform: scale(1) translateY(0); }
+  35%  { transform: scale(1.35) translateY(-4px); }
+  100% { transform: scale(1) translateY(0); }
+}
+
+.pet { transform-box: fill-box; transform-origin: center; }
+.pet-pet_cat     { animation: pet-cat-sway     2s   steps(2, end) infinite; }
+.pet-pet_fox     { animation: pet-fox-bounce   0.6s steps(2, end) infinite; }
+.pet-pet_owl     { animation: pet-owl-bob      3s   steps(2, end) infinite; }
+.pet-pet_dragon  { animation: pet-dragon-hover 1.5s ease-in-out  infinite; }
+/* One-shot cheer overlays on top of the idle animation. */
+.pet.pet-cheer   { animation: pet-cheer-pop 0.6s ease-out; }
+
+.card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+}
+
+.btn {
+  padding: 10px 20px;
+  border-radius: 8px;
+  border: none;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.btn-primary {
+  background: var(--accent);
+  color: white;
+}
+.btn-primary:hover { background: var(--accent2); transform: translateY(-1px); }
+
+.btn-ghost {
+  background: transparent;
+  border: 1px solid var(--border-bright);
+  color: var(--text-muted);
+}
+.btn-ghost:hover { border-color: var(--accent); color: var(--accent2); }
+
+.btn-gold {
+  background: linear-gradient(135deg, var(--gold), var(--gold2));
+  color: #1a1200;
+  font-weight: 600;
+}
+.btn-gold:hover { transform: translateY(-1px); box-shadow: 0 4px 16px rgba(245,158,11,0.3); }
+
+.xp-bar-wrap {
+  background: var(--bg3);
+  border-radius: 99px;
+  height: 8px;
+  overflow: hidden;
+  position: relative;
+}
+
+.xp-bar-fill {
+  height: 100%;
+  border-radius: 99px;
+  background: linear-gradient(90deg, var(--accent), var(--accent2));
+  transition: width 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+  position: relative;
+}
+
+.xp-bar-fill::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.2) 50%, transparent 100%);
+  background-size: 200% 100%;
+  animation: shimmer 2s linear infinite;
+}
+
+.streak-fire {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--gold);
+}
