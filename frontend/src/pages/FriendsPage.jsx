@@ -285,7 +285,7 @@ export default function FriendsPage() {
       equipped: myEquipped,
       isSelf: true,
     },
-    ...friends
+    ...friends.filter(f => !f.suspended)
   ].sort((a, b) => b.xp - a.xp);
 
   const TABS = [

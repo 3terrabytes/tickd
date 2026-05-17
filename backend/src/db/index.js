@@ -136,10 +136,22 @@ const initDB = async () => {
       earned_at TIMESTAMP DEFAULT NOW(),
       PRIMARY KEY (user_id, code)
     );
+
+    -- Admin & moderation
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin           BOOLEAN DEFAULT false;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS suspension_type    VARCHAR(10);   -- null | 'warn' | 'temp' | 'perm'
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS suspension_reason  TEXT;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS suspended_until    TIMESTAMP;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS suspended_at       TIMESTAMP;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS suspended_by       INTEGER;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS warning_seen       BOOLEAN DEFAULT false;
+
+    -- Suggestion admin status: open | planned | done | rejected
+    ALTER TABLE suggestions ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'open';
   `);
-  // Grant infinite gold to theDevs account (if it exists)
+  // Grant infinite gold + admin flag to theDevs account (if it exists)
   await pool.query(`
-    UPDATE users SET gold = 2147483647 WHERE LOWER(username) = 'thedevs'
+    UPDATE users SET gold = 2147483647, is_admin = true WHERE LOWER(username) = 'thedevs'
   `);
   console.log('✅ Database initialized');
 };

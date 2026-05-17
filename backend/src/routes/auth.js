@@ -44,10 +44,41 @@ router.post('/login', async (req, res) => {
     const valid = await bcrypt.compare(password, user.password_hash);
     if (!valid) return res.status(401).json({ error: 'Invalid credentials' });
 
+    // Block login for active perm/temp suspensions. Warn-only allows login.
+    const now = new Date();
+    let active = user.suspension_type === 'perm';
+    if (user.suspension_type === 'temp' && user.suspended_until && new Date(user.suspended_until) > now) {
+      active = true;
+    } else if (user.suspension_type === 'temp' && user.suspended_until && new Date(user.suspended_until) <= now) {
+      await pool.query(
+        `UPDATE users SET suspension_type = NULL, suspension_reason = NULL,
+           suspended_until = NULL, suspended_at = NULL, suspended_by = NULL
+         WHERE id = $1`, [user.id]
+      );
+      user.suspension_type = null;
+    }
+
+    if (active) {
+      let msg = user.suspension_type === 'perm'
+        ? 'Your account has been permanently suspended.'
+        : `Your account is suspended until ${new Date(user.suspended_until).toLocaleString()}.`;
+      if (user.suspension_reason) msg += ` Reason: ${user.suspension_reason}`;
+      return res.status(403).json({
+        error: msg,
+        suspended: true,
+        suspension: {
+          type: user.suspension_type,
+          reason: user.suspension_reason,
+          until: user.suspended_until,
+        },
+      });
+    }
+
     const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET, { expiresIn: '30d' });
     const { password_hash, ...safeUser } = user;
     res.json({ token, user: safeUser });
-  } catch {
+  } catch (err) {
+    console.error('Login error:', err);
     res.status(500).json({ error: 'Server error' });
   }
 });
@@ -56,10 +87,24 @@ router.post('/login', async (req, res) => {
 router.get('/me', require('../middleware/auth'), async (req, res) => {
   try {
     const { rows } = await pool.query(
-      'SELECT id, username, email, xp, level, avatar_color, gold, avatar_skin, avatar_hair, avatar_eyes, avatar_hair_style, avatar_gender, avatar_beard, streak_shield, debrief_seen, created_at FROM users WHERE id = $1',
+      `SELECT id, username, email, xp, level, avatar_color, gold, avatar_skin, avatar_hair,
+              avatar_eyes, avatar_hair_style, avatar_gender, avatar_beard, streak_shield,
+              debrief_seen, created_at, is_admin,
+              suspension_type, suspension_reason, suspended_until, suspended_at, warning_seen
+       FROM users WHERE id = $1`,
       [req.userId]
     );
     res.json(rows[0]);
+  } catch {
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Mark active warning as seen
+router.patch('/warning-seen', require('../middleware/auth'), async (req, res) => {
+  try {
+    await pool.query('UPDATE users SET warning_seen = true WHERE id = $1', [req.userId]);
+    res.json({ success: true });
   } catch {
     res.status(500).json({ error: 'Server error' });
   }

@@ -10,6 +10,8 @@ import SuggestionsPage from './pages/SuggestionsPage';
 import SettingsPage from './pages/SettingsPage';
 import ProfilePage from './pages/ProfilePage';
 import TermsPage from './pages/TermsPage';
+import AdminPage from './pages/AdminPage';
+import SuspensionWarning from './components/SuspensionWarning';
 import UpdateModal from './components/UpdateModal';
 import './index.css';
 
@@ -52,6 +54,11 @@ function Layout({ children }) {
             <NavLink to="/suggestions" style={({ isActive }) => ({ ...styles.navLink, ...(isActive ? styles.navLinkActive : {}) })}>
               Suggest
             </NavLink>
+            {user?.is_admin && (
+              <NavLink to="/admin" style={({ isActive }) => ({ ...styles.navLink, ...(isActive ? styles.navLinkActive : {}), color: 'var(--gold)' })}>
+                ⚡ Admin
+              </NavLink>
+            )}
           </nav>
 
           <button className="btn btn-ghost" style={{ padding: '8px 14px', fontSize: 13 }} onClick={logout}>
@@ -62,8 +69,15 @@ function Layout({ children }) {
       <main style={styles.main}>{children}</main>
       <Footer />
       <UpdateModal />
+      <SuspensionWarning />
     </div>
   );
+}
+
+function AdminGuard({ children }) {
+  const { user } = useAuth();
+  if (!user?.is_admin) return <Navigate to="/" replace />;
+  return children;
 }
 
 function Protected({ children }) {
@@ -87,6 +101,7 @@ export default function App() {
           <Route path="/avatar" element={<Protected><Layout><AvatarPage /></Layout></Protected>} />
           <Route path="/suggestions" element={<Protected><Layout><SuggestionsPage /></Layout></Protected>} />
           <Route path="/settings" element={<Protected><Layout><SettingsPage /></Layout></Protected>} />
+          <Route path="/admin" element={<Protected><Layout><AdminGuard><AdminPage /></AdminGuard></Layout></Protected>} />
           <Route path="/users/:username" element={<ProfilePage />} />
           <Route path="/terms" element={<TermsPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />

@@ -73,6 +73,7 @@ router.get('/', async (req, res) => {
   const today = new Date().toISOString().split('T')[0];
   const { rows } = await pool.query(`
     SELECT u.id, u.username, u.xp, u.level, u.avatar_color, u.avatar_skin, u.avatar_hair, u.avatar_eyes, u.avatar_hair_style, u.avatar_beard,
+      u.suspension_type, u.suspended_until,
       e.weapon AS eq_weapon, e.armor AS eq_armor, e.banner AS eq_banner, e.badge AS eq_badge,
       (SELECT COUNT(*) FROM habit_logs l WHERE l.user_id = u.id AND l.completed_date = $2) AS completed_today,
       (SELECT COUNT(*) FROM habits h WHERE h.user_id = u.id) AS total_habits,
@@ -84,7 +85,18 @@ router.get('/', async (req, res) => {
     LEFT JOIN user_equipped e ON e.user_id = u.id
     WHERE u.id != $1 ORDER BY u.xp DESC
   `, [req.userId, today]);
-  res.json(rows.map(r => ({ ...enrichEquipped(r), levelTitle: levelTitle(r.level), xpForNextLevel: xpForLevel(r.level + 1) })));
+  const now = new Date();
+  res.json(rows.map(r => {
+    const suspended =
+      r.suspension_type === 'perm' ||
+      (r.suspension_type === 'temp' && r.suspended_until && new Date(r.suspended_until) > now);
+    return {
+      ...enrichEquipped(r),
+      levelTitle: levelTitle(r.level),
+      xpForNextLevel: xpForLevel(r.level + 1),
+      suspended,
+    };
+  }));
 });
 
 module.exports = router;
