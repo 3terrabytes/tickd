@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { api } from '../api';
 import { useAuth } from '../context/AuthContext';
 import PixelCharacter from '../components/PixelCharacter';
+import BannerName from '../components/BannerName';
 
 function levelTitle(level) {
   const t = ['','Rookie','Apprentice','Explorer','Achiever','Challenger','Warrior','Champion','Master','Grandmaster','Legend'];
@@ -84,9 +85,14 @@ function FriendProfileCard({ friend, onClose }) {
           }}>
             <PixelCharacter appearance={friend} equipped={friend.equipped || {}} size={64} />
           </div>
-          <div style={{ flex: 1 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <h3 style={{ fontFamily: 'Cinzel, serif', fontSize: 18, margin: 0 }}>{friend.username}</h3>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+              <BannerName
+                username={friend.username}
+                banner={friend.equipped?.banner}
+                size="md"
+                cinzel
+              />
             </div>
             <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Lv.{friend.level} {levelTitle(friend.level)}</div>
           </div>
@@ -349,8 +355,10 @@ export default function FriendsPage() {
               {pending.map(p => (
                 <div key={p.id} style={S.friendRow} className="card">
                   <Avatar user={p} />
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 500 }}>{p.username}</div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ marginBottom: 2 }}>
+                      <BannerName username={p.username} banner={p.equipped?.banner} size="sm" />
+                    </div>
                     <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Lv.{p.level} {levelTitle(p.level)}</div>
                   </div>
                   <button className="btn btn-primary" style={{ padding: '7px 12px', fontSize: 12 }} onClick={() => accept(p.id)}>Accept</button>
@@ -368,8 +376,10 @@ export default function FriendsPage() {
             <div key={f.id} className="card" style={{ ...S.friendRow, cursor: 'pointer' }}
               onClick={() => setSelectedFriend(f)}>
               <Avatar user={f} />
-              <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 500 }}>{f.username}</div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ marginBottom: 2 }}>
+                  <BannerName username={f.username} banner={f.equipped?.banner} size="sm" />
+                </div>
                 <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
                   Lv.{f.level} · {f.completed_today}/{f.total_habits} today · 🔥{f.best_streak}
                 </div>
@@ -396,8 +406,10 @@ export default function FriendsPage() {
               return (
                 <div key={u.id} style={S.friendRow} className="card">
                   <Avatar user={u} />
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 500 }}>{u.username}</div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ marginBottom: 2 }}>
+                      <BannerName username={u.username} banner={u.equipped?.banner} size="sm" />
+                    </div>
                     <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Lv.{u.level} {levelTitle(u.level)}</div>
                   </div>
                   {isFriend ? (
@@ -669,14 +681,13 @@ function Podium({ players, onClick }) {
 
         {/* Name + XP */}
         <div style={{ marginTop: 8, textAlign: 'center', maxWidth: '100%', padding: '0 4px' }}>
-          <div style={{
-            fontWeight: 700, fontSize: rank === 1 ? 14 : 13,
-            color: player.isSelf ? 'var(--accent2)' : 'var(--text)',
-            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-          }}>
-            {player.username}{player.isSelf && ' (you)'}
-          </div>
-          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+          <BannerName
+            username={player.username}
+            banner={player.equipped?.banner}
+            size={rank === 1 ? 'md' : 'sm'}
+            isSelf={player.isSelf}
+          />
+          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
             Lv.{player.level} · {player.xp.toLocaleString()} XP
           </div>
         </div>
@@ -738,9 +749,12 @@ function PlayerCard({ player, rank, onClick }) {
       <Avatar user={player} size={44} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            {player.username}{player.isSelf && ' (you)'}
-          </span>
+          <BannerName
+            username={player.username}
+            banner={player.equipped?.banner}
+            size="sm"
+            isSelf={player.isSelf}
+          />
           <span style={{ padding: '2px 8px', borderRadius: 99, fontSize: 11, background: player.isSelf ? 'var(--accent)' : 'var(--bg3)', color: player.isSelf ? 'white' : 'var(--text-muted)', flexShrink: 0 }}>
             Lv.{player.level}
           </span>

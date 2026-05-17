@@ -13,6 +13,7 @@ import TermsPage from './pages/TermsPage';
 import AchievementsPage from './pages/AchievementsPage';
 import StatsPage from './pages/StatsPage';
 import UpdateModal from './components/UpdateModal';
+import FeaturesDebreifModal from './components/FeaturesDebreifModal';
 import './index.css';
 
 function Layout({ children }) {
@@ -70,6 +71,7 @@ function Layout({ children }) {
       <main style={styles.main}>{children}</main>
       <Footer />
       <UpdateModal />
+      <FeaturesDebreifModal />
     </div>
   );
 }

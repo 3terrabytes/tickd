@@ -3,6 +3,7 @@ import { api } from '../api';
 import { useAuth } from '../context/AuthContext';
 import { levelTitle, xpForLevel } from '../utils/xp';
 import PixelCharacter from '../components/PixelCharacter';
+import BannerName from '../components/BannerName';
 
 const ICONS = ['⚡','🏃','📚','🧘','💪','🥗','💧','🎯','🧠','🌅','🎨','🎸','💻','🌿','❤️'];
 const COLORS = ['#6366f1','#ec4899','#f59e0b','#10b981','#3b82f6','#8b5cf6','#ef4444','#06b6d4'];
@@ -118,8 +119,15 @@ export default function Dashboard() {
       <div style={styles.playerCard} className="card">
         <div style={styles.playerRow}>
           <PixelCharacter equipped={equipped} appearance={user||{}} size={80} cheering={petCheering}/>
-          <div style={{ flex: 1 }}>
-            <div style={styles.playerName}>{user?.username}</div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ marginBottom: 4 }}>
+              <BannerName
+                username={user?.username || ''}
+                banner={equipped?.banner}
+                size="lg"
+                cinzel
+              />
+            </div>
             <div style={styles.playerTitle}>
               <span style={styles.levelBadge}>Lv.{currentLevel}</span>
               <span style={{ color: 'var(--text-muted)', fontSize: 13 }}>{levelTitle(currentLevel)}</span>

@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import PixelCharacter, {
   HAIR_STYLES, BEARD_STYLES, SKIN_TONES, HAIR_COLORS, EYE_COLORS,
 } from '../components/PixelCharacter';
+import BannerName from '../components/BannerName';
 
 const RARITY_STYLES = {
   common:    { color: '#9ca3af', label: 'Common',    border: '#9ca3af44' },
@@ -217,22 +218,17 @@ export default function AvatarPage() {
               />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
-                  {inventory.equipped.banner && (
-                    <div style={{
-                      background: inventory.equipped.banner.color,
-                      borderRadius: 6, padding: '3px 10px',
-                      fontSize: 12, fontWeight: 600, color: 'white',
-                      textShadow: '0 1px 3px rgba(0,0,0,0.5)'
-                    }}>
-                      {inventory.equipped.banner.name}
-                    </div>
-                  )}
+                  <BannerName
+                    username={user?.username || ''}
+                    banner={inventory.equipped.banner}
+                    size="lg"
+                    cinzel
+                  />
                   {inventory.equipped.badge && (
-                    <span style={{ fontSize: 20 }}>{inventory.equipped.badge.emoji}</span>
+                    <span style={{ fontSize: 20 }} title={inventory.equipped.badge.name}>
+                      {inventory.equipped.badge.emoji}
+                    </span>
                   )}
-                </div>
-                <div style={{ fontFamily: 'Cinzel, serif', fontSize: 20, fontWeight: 700, marginBottom: 2 }}>
-                  {user?.username}
                 </div>
                 <div style={{ color: 'var(--text-muted)', fontSize: 13, marginBottom: 12 }}>
                   Level {user?.level} · {totalMagic > 0 ? `✨ ${totalMagic} Magic Power` : 'No gear equipped'}
@@ -354,15 +350,19 @@ export default function AvatarPage() {
 
       {/* SHOP TAB */}
       {tab === 'shop' && (
-        <div>
-          <PreviewPanel
-            user={user}
-            effectiveEquipped={effectiveEquipped}
-            previewItem={previewItem}
-            owned={previewItem && shopData.ownedIds.includes(previewItem.id)}
-            onEquip={equip}
-            equipping={equipping}
-          />
+        <div style={styles.splitRow}>
+          <aside style={styles.sideCol}>
+            <PreviewPanel
+              user={user}
+              effectiveEquipped={effectiveEquipped}
+              previewItem={previewItem}
+              owned={previewItem && shopData.ownedIds.includes(previewItem.id)}
+              onEquip={equip}
+              equipping={equipping}
+              vertical
+            />
+          </aside>
+          <div style={styles.gridCol}>
           <div style={styles.filterRow}>
             {['all', ...TYPES, 'consumable'].map(f => (
               <button key={f} style={{ ...styles.filterBtn, ...(shopFilter === f ? styles.filterBtnActive : {}) }}
@@ -418,20 +418,25 @@ export default function AvatarPage() {
               );
             })}
           </div>
+          </div>
         </div>
       )}
 
       {/* INVENTORY TAB */}
       {tab === 'inventory' && (
-        <div>
-          <PreviewPanel
-            user={user}
-            effectiveEquipped={effectiveEquipped}
-            previewItem={previewItem}
-            owned={true} /* everything in inventory is owned */
-            onEquip={equip}
-            equipping={equipping}
-          />
+        <div style={styles.splitRow}>
+          <aside style={styles.sideCol}>
+            <PreviewPanel
+              user={user}
+              effectiveEquipped={effectiveEquipped}
+              previewItem={previewItem}
+              owned={true} /* everything in inventory is owned */
+              onEquip={equip}
+              equipping={equipping}
+              vertical
+            />
+          </aside>
+          <div style={styles.gridCol}>
           {inventory.items.length === 0 ? (
             <div style={styles.empty}>
               <div style={{ fontSize: 48, marginBottom: 12 }}>🎒</div>
@@ -486,6 +491,7 @@ export default function AvatarPage() {
               })}
             </div>
           )}
+          </div>
         </div>
       )}
     </div>
@@ -493,37 +499,47 @@ export default function AvatarPage() {
 }
 
 // ── Avatar preview panel (Shop & Inventory tabs) ─────────────────────────
-function PreviewPanel({ user, effectiveEquipped, previewItem, owned, onEquip, equipping }) {
+// When `vertical` is true, the avatar stacks on top of the item info (used in
+// the new side column). When false, the avatar sits next to the info (legacy).
+function PreviewPanel({ user, effectiveEquipped, previewItem, owned, onEquip, equipping, vertical = false }) {
   const isBanner = previewItem?.type === 'banner';
   const r = previewItem ? rarityOf(previewItem) : null;
+  // For banner previews we want the *previewed* banner behind the username,
+  // not the currently-equipped one — gives a real "what would this look like".
+  const usernameBanner = isBanner ? previewItem : effectiveEquipped?.banner;
+
+  const avatarSize = vertical ? 140 : 100;
 
   return (
     <div className="card animate-fade" style={{
-      display: 'flex', gap: 16, alignItems: 'center', padding: 16, marginBottom: 16,
+      display: 'flex',
+      flexDirection: vertical ? 'column' : 'row',
+      gap: vertical ? 12 : 16,
+      alignItems: 'center',
+      padding: 16,
+      marginBottom: vertical ? 0 : 16,
       borderColor: previewItem ? r.color + '88' : 'var(--border)',
     }}>
       <PixelCharacter
         appearance={user || {}}
         equipped={effectiveEquipped}
-        size={100}
+        size={avatarSize}
       />
-      <div style={{ flex: 1, minWidth: 0 }}>
+      <div style={{ flex: 1, minWidth: 0, textAlign: vertical ? 'center' : 'left', width: vertical ? '100%' : 'auto' }}>
+        <div style={{ marginBottom: 6 }}>
+          <BannerName
+            username={user?.username || ''}
+            banner={usernameBanner}
+            size={vertical ? 'md' : 'md'}
+            cinzel
+          />
+        </div>
         {previewItem ? (
           <>
-            <div style={{ fontSize: 10, color: 'var(--text-muted)', letterSpacing: '0.08em', fontWeight: 600, marginBottom: 2 }}>
+            <div style={{ fontSize: 10, color: 'var(--text-muted)', letterSpacing: '0.08em', fontWeight: 600, marginBottom: 4 }}>
               PREVIEWING
             </div>
-            {isBanner && (
-              <div style={{
-                display: 'inline-block', background: previewItem.color,
-                borderRadius: 6, padding: '3px 10px', marginBottom: 6,
-                fontSize: 12, fontWeight: 600, color: 'white',
-                textShadow: '0 1px 3px rgba(0,0,0,0.5)',
-              }}>
-                {previewItem.name}
-              </div>
-            )}
-            <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>
+            <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4 }}>
               {!isBanner && <span style={{ marginRight: 6 }}>{previewItem.emoji}</span>}
               {previewItem.name}
             </div>
@@ -544,14 +560,9 @@ function PreviewPanel({ user, effectiveEquipped, previewItem, owned, onEquip, eq
             )}
           </>
         ) : (
-          <>
-            <div style={{ fontFamily: 'Cinzel, serif', fontSize: 15, fontWeight: 600, marginBottom: 4 }}>
-              {user?.username}
-            </div>
-            <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>
-              Tap any item to try it on.
-            </div>
-          </>
+          <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>
+            Tap any item to try it on.
+          </div>
         )}
       </div>
     </div>
@@ -607,6 +618,16 @@ function StylePreview({ children, label, active, onClick }) {
 }
 
 const styles = {
+  splitRow: {
+    display: 'flex', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap',
+  },
+  sideCol: {
+    flex: '1 1 220px', minWidth: 220, maxWidth: 280,
+    position: 'sticky', top: 74, alignSelf: 'flex-start',
+  },
+  gridCol: {
+    flex: '3 1 320px', minWidth: 280,
+  },
   tabs: {
     display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)',
     background: 'var(--bg2)', borderRadius: 10, padding: 4,

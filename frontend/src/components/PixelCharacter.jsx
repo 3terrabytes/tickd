@@ -51,12 +51,20 @@ export default function PixelCharacter({
   const weapon    = equipped.weapon;
   const armor     = equipped.armor;
   const companion = equipped.companion;
+  const banner    = equipped.banner;
+  const badge     = equipped.badge;
 
   const bodyColor   = armor ? armorColor(armor.rarity)     : '#6b5b9a';
   const armorHL     = armor ? armorHighlight(armor.rarity) : '#9c89c8';
   const capeColor   = armor ? capeTone(armor.rarity)       : null;
   const skinDark    = darken(skin, 25);
   const hairDark    = darken(hair, 30);
+
+  // Parse banner.color (e.g. "linear-gradient(90deg,#7f1d1d,#dc2626)") to two stops
+  const bannerStops = banner ? parseGradientStops(banner.color) : null;
+  const bannerId    = banner ? `banner-${banner.id || 'x'}-${size}` : null;
+  const isLegendaryArmor = armor && armor.rarity === 'legendary';
+  const isEpicArmor      = armor && armor.rarity === 'epic';
 
   return (
     <div style={{ width: size, height: size, imageRendering: 'pixelated', flexShrink: 0 }}>
@@ -67,6 +75,26 @@ export default function PixelCharacter({
         style={{ imageRendering: 'pixelated', display: 'block' }}
         shapeRendering="crispEdges"
       >
+        {/* ── BANNER aura (behind everything) ───────────────────────────── */}
+        {banner && bannerStops && (
+          <defs>
+            <linearGradient id={bannerId} x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0%"   stopColor={bannerStops[0]} />
+              <stop offset="100%" stopColor={bannerStops[1]} />
+            </linearGradient>
+          </defs>
+        )}
+        {banner && (
+          <>
+            <rect x="16" y="6" width="48" height="68" rx="2"
+                  fill={bannerStops ? `url(#${bannerId})` : '#6366f1'}
+                  opacity="0.32" />
+            {/* banner pole tips top */}
+            <rect x="14" y="6" width="2" height="3" fill={bannerStops?.[0] || '#6366f1'} opacity="0.7" />
+            <rect x="64" y="6" width="2" height="3" fill={bannerStops?.[1] || '#6366f1'} opacity="0.7" />
+          </>
+        )}
+
         {/* Soft ground shadow */}
         <ellipse cx="40" cy="74" rx="18" ry="3" fill="rgba(0,0,0,0.35)" />
 
@@ -186,12 +214,39 @@ export default function PixelCharacter({
           <rect x="28" y="14" width="24" height="2" fill={armorHL} opacity="0.55" />
         )}
 
-        {/* ── COMPANION (pet) — left of body, on the same ground plane ── */}
+        {/* ── CROWN for legendary armor ─────────────────────────────────── */}
+        {isLegendaryArmor && (
+          <g>
+            <rect x="34" y="6"  width="12" height="3" fill="#f0d060" />
+            <rect x="34" y="4"  width="2"  height="3" fill="#f0d060" />
+            <rect x="39" y="3"  width="2"  height="4" fill="#f0d060" />
+            <rect x="44" y="4"  width="2"  height="3" fill="#f0d060" />
+            <rect x="39" y="4"  width="2"  height="1" fill="#ef4444" />
+            <rect x="34" y="8"  width="12" height="1" fill="#8b6914" />
+          </g>
+        )}
+        {/* Epic armor gets a simpler band */}
+        {isEpicArmor && (
+          <rect x="34" y="6" width="12" height="2" fill="#9a7fce" opacity="0.85" />
+        )}
+
+        {/* ── BADGE plaque on chest ─────────────────────────────────────── */}
+        {badge && (
+          <g>
+            <title>{badge.name}{badge.desc ? `: ${badge.desc}` : ''}</title>
+            <rect x="36" y="42" width="8" height="8" fill={rarityFill(badge.rarity)} stroke="#1a1a1a" strokeWidth="0.6" />
+            <rect x="36" y="42" width="8" height="2" fill={rarityHighlight(badge.rarity)} />
+            <text x="40" y="49" fontSize="6" textAnchor="middle" fontFamily="serif">{badge.emoji}</text>
+          </g>
+        )}
+
+        {/* ── COMPANION (pet) — pixel-art, left of body, same ground plane */}
         {companion && (
-          <g className={`pet pet-${companion.id}${cheering ? ' pet-cheer' : ''}`}>
+          <g className={`pet pet-${companion.id}${cheering ? ' pet-cheer' : ''}`}
+             shapeRendering="crispEdges">
             <title>{companion.name}: {companion.desc}</title>
             <ellipse cx="14" cy="74" rx="6" ry="1.5" fill="rgba(0,0,0,0.35)" />
-            <text x="14" y="72" fontSize="12" textAnchor="middle">{companion.emoji}</text>
+            {renderPet(companion.id, cheering)}
           </g>
         )}
       </svg>
@@ -318,4 +373,175 @@ function darken(hex, amt = 30) {
   const g = Math.max(0, ((num >> 8) & 0xff) - amt);
   const b = Math.max(0, (num & 0xff) - amt);
   return `#${[r, g, b].map(v => v.toString(16).padStart(2, '0')).join('')}`;
+}
+
+// Rarity → SVG plaque colors (used by badge render)
+function rarityFill(rarity) {
+  const map = { common: '#475569', rare: '#1e40af', epic: '#5b21b6', legendary: '#b45309' };
+  return map[rarity] || '#475569';
+}
+function rarityHighlight(rarity) {
+  const map = { common: '#94a3b8', rare: '#3b82f6', epic: '#8b5cf6', legendary: '#f59e0b' };
+  return map[rarity] || '#94a3b8';
+}
+
+// Parse a CSS linear-gradient string and return its first two hex stops.
+// Falls back to null if the string isn't a recognised gradient.
+function parseGradientStops(str) {
+  if (!str || typeof str !== 'string') return null;
+  const hexes = str.match(/#[0-9a-fA-F]{3,8}/g);
+  if (!hexes || hexes.length < 2) {
+    return hexes && hexes.length === 1 ? [hexes[0], hexes[0]] : null;
+  }
+  return [hexes[0], hexes[1]];
+}
+
+// ── Pixel-art pet sprites ────────────────────────────────────────────────
+// Each pet is drawn on the ground at the character's left (around x:8-22, y:64-72).
+// All coordinates are integers so the sprite is crisp at any scale.
+function renderPet(id, cheering) {
+  switch (id) {
+    case 'pet_cat':    return <CatSprite />;
+    case 'pet_fox':    return <FoxSprite />;
+    case 'pet_owl':    return <OwlSprite />;
+    case 'pet_dragon': return <DragonSprite cheering={cheering} />;
+    default:           return null;
+  }
+}
+
+function CatSprite() {
+  const O = '#f59e0b';  // orange body
+  const OD = '#d97706'; // darker orange (stripes/ears)
+  const OL = '#fbbf24'; // lighter orange (belly highlight)
+  return (
+    <g>
+      {/* ears */}
+      <rect x="9"  y="62" width="1" height="2" fill={OD} />
+      <rect x="14" y="62" width="1" height="2" fill={OD} />
+      {/* head */}
+      <rect x="9"  y="64" width="6" height="4" fill={O} />
+      {/* eyes */}
+      <rect x="10" y="65" width="1" height="1" fill="#1a1a1a" />
+      <rect x="13" y="65" width="1" height="1" fill="#1a1a1a" />
+      {/* nose */}
+      <rect x="11" y="66" width="2" height="1" fill="#ec4899" />
+      {/* body */}
+      <rect x="9"  y="68" width="8" height="4" fill={O} />
+      <rect x="10" y="69" width="6" height="2" fill={OL} />
+      {/* stripes */}
+      <rect x="11" y="68" width="1" height="1" fill={OD} />
+      <rect x="14" y="68" width="1" height="1" fill={OD} />
+      <rect x="12" y="71" width="1" height="1" fill={OD} />
+      {/* legs */}
+      <rect x="9"  y="72" width="2" height="1" fill={OD} />
+      <rect x="15" y="72" width="2" height="1" fill={OD} />
+      {/* tail */}
+      <rect x="17" y="68" width="1" height="2" fill={O} />
+      <rect x="18" y="65" width="1" height="3" fill={O} />
+      <rect x="18" y="64" width="1" height="1" fill={OD} />
+    </g>
+  );
+}
+
+function FoxSprite() {
+  const R = '#ef4444';  // red body
+  const RD = '#b91c1c'; // darker red
+  const W = '#f8fafc';  // white muzzle/tail tip
+  return (
+    <g>
+      {/* ear tufts (red w/ dark tip) */}
+      <rect x="9"  y="61" width="1" height="1" fill={RD} />
+      <rect x="9"  y="62" width="1" height="2" fill={R}  />
+      <rect x="14" y="61" width="1" height="1" fill={RD} />
+      <rect x="14" y="62" width="1" height="2" fill={R}  />
+      {/* head */}
+      <rect x="9"  y="64" width="6" height="3" fill={R} />
+      {/* white muzzle */}
+      <rect x="11" y="66" width="2" height="1" fill={W} />
+      <rect x="11" y="67" width="2" height="1" fill={W} />
+      {/* eyes */}
+      <rect x="10" y="65" width="1" height="1" fill="#1a1a1a" />
+      <rect x="13" y="65" width="1" height="1" fill="#1a1a1a" />
+      {/* body */}
+      <rect x="10" y="68" width="7" height="3" fill={R} />
+      <rect x="10" y="71" width="7" height="1" fill={RD} />
+      {/* legs */}
+      <rect x="10" y="72" width="2" height="1" fill={RD} />
+      <rect x="15" y="72" width="2" height="1" fill={RD} />
+      {/* bushy tail with white tip */}
+      <rect x="17" y="67" width="2" height="3" fill={R}  />
+      <rect x="18" y="66" width="2" height="2" fill={R}  />
+      <rect x="19" y="65" width="1" height="2" fill={W}  />
+    </g>
+  );
+}
+
+function OwlSprite() {
+  const B  = '#78350f'; // dark brown
+  const BL = '#a16207'; // lighter brown belly
+  const Y  = '#fbbf24'; // eye yellow
+  return (
+    <g>
+      {/* ear tufts */}
+      <rect x="9"  y="62" width="2" height="2" fill={B} />
+      <rect x="13" y="62" width="2" height="2" fill={B} />
+      {/* head/body fused */}
+      <rect x="9"  y="64" width="6" height="8" fill={B} />
+      {/* belly stripes */}
+      <rect x="11" y="67" width="2" height="4" fill={BL} />
+      <rect x="11" y="68" width="2" height="1" fill={B} opacity="0.6" />
+      <rect x="11" y="70" width="2" height="1" fill={B} opacity="0.6" />
+      {/* big eyes */}
+      <rect x="10" y="65" width="2" height="2" fill={Y} />
+      <rect x="12" y="65" width="2" height="2" fill={Y} />
+      <rect x="11" y="66" width="1" height="1" fill="#1a1a1a" />
+      <rect x="13" y="66" width="1" height="1" fill="#1a1a1a" />
+      {/* beak */}
+      <rect x="12" y="67" width="1" height="1" fill="#f59e0b" />
+      {/* feet */}
+      <rect x="10" y="72" width="2" height="1" fill="#fbbf24" />
+      <rect x="13" y="72" width="2" height="1" fill="#fbbf24" />
+    </g>
+  );
+}
+
+function DragonSprite({ cheering }) {
+  const G  = '#10b981'; // emerald body
+  const GD = '#065f46'; // dark green
+  const GL = '#34d399'; // light green (wings)
+  return (
+    <g>
+      {/* wings (spread) */}
+      <rect x="6"  y="65" width="3" height="3" fill={GL} />
+      <rect x="7"  y="64" width="2" height="1" fill={GL} />
+      <rect x="19" y="65" width="3" height="3" fill={GL} />
+      <rect x="19" y="64" width="2" height="1" fill={GL} />
+      {/* body */}
+      <rect x="9"  y="66" width="10" height="5" fill={G} />
+      <rect x="9"  y="71" width="10" height="1" fill={GD} />
+      {/* head (snout pokes right slightly) */}
+      <rect x="11" y="64" width="6" height="3" fill={G} />
+      {/* spikes on back */}
+      <rect x="12" y="63" width="1" height="1" fill={GD} />
+      <rect x="14" y="63" width="1" height="1" fill={GD} />
+      <rect x="16" y="63" width="1" height="1" fill={GD} />
+      {/* eye */}
+      <rect x="15" y="65" width="1" height="1" fill="#fde047" />
+      <rect x="15" y="65" width="1" height="1" fill="#dc2626" opacity="0.7" />
+      {/* legs */}
+      <rect x="10" y="72" width="2" height="1" fill={GD} />
+      <rect x="16" y="72" width="2" height="1" fill={GD} />
+      {/* tail */}
+      <rect x="19" y="68" width="1" height="2" fill={G} />
+      <rect x="20" y="68" width="1" height="1" fill={G} />
+      <rect x="21" y="67" width="1" height="1" fill={GD} />
+      {/* fire breath (animated on cheer) */}
+      {cheering && (
+        <>
+          <rect x="17" y="65" width="1" height="1" fill="#f59e0b" />
+          <rect x="18" y="65" width="1" height="1" fill="#dc2626" />
+        </>
+      )}
+    </g>
+  );
 }

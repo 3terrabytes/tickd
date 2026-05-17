@@ -56,7 +56,7 @@ router.post('/login', async (req, res) => {
 router.get('/me', require('../middleware/auth'), async (req, res) => {
   try {
     const { rows } = await pool.query(
-      'SELECT id, username, email, xp, level, avatar_color, gold, avatar_skin, avatar_hair, avatar_eyes, avatar_hair_style, avatar_gender, avatar_beard, streak_shield, created_at FROM users WHERE id = $1',
+      'SELECT id, username, email, xp, level, avatar_color, gold, avatar_skin, avatar_hair, avatar_eyes, avatar_hair_style, avatar_gender, avatar_beard, streak_shield, debrief_seen, created_at FROM users WHERE id = $1',
       [req.userId]
     );
     res.json(rows[0]);
@@ -117,6 +117,17 @@ router.patch('/password', require('../middleware/auth'), async (req, res) => {
     res.json({ success: true });
   } catch (err) {
     console.error('Password change error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Mark features debrief as seen
+router.patch('/debrief-seen', require('../middleware/auth'), async (req, res) => {
+  try {
+    await pool.query('UPDATE users SET debrief_seen = true WHERE id = $1', [req.userId]);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Debrief seen error:', err);
     res.status(500).json({ error: 'Server error' });
   }
 });

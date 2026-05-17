@@ -125,6 +125,7 @@ const initDB = async () => {
     ALTER TABLE users ADD COLUMN IF NOT EXISTS notif_time       VARCHAR(5) DEFAULT '20:00';
     ALTER TABLE users ADD COLUMN IF NOT EXISTS theme            TEXT DEFAULT 'default';
     ALTER TABLE users ADD COLUMN IF NOT EXISTS update_seen      BOOLEAN DEFAULT false;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS debrief_seen     BOOLEAN DEFAULT false;
 
     -- Lifetime gold earned (separate from the spendable gold balance)
     ALTER TABLE users ADD COLUMN IF NOT EXISTS lifetime_gold    BIGINT DEFAULT 0;
