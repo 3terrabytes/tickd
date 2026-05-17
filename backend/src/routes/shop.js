@@ -124,6 +124,9 @@ router.post('/use/:itemId', async (req, res) => {
   } else if (item.id === 'baguette_stale') {
     await addXP(req.userId, 1);
     result = { xpGained: 1, message: 'Stale, but somehow nutritious.' };
+  } else if (item.id === 'potion_frog') {
+    await addXP(req.userId, 200);
+    result = { xpGained: 200, message: 'Ribbit! 🐸' };
   } else {
     return res.status(400).json({ error: 'Unknown consumable effect' });
   }

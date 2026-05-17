@@ -83,6 +83,15 @@ const ITEMS = [
   { id: 'title_grinder',   type: 'title',  name: '"The Grinder"',      rarity: 'rare',      cost: 250,  magic: 0,  emoji: '⚙️',  desc: 'Never stops. Never rests.' },
   { id: 'title_phantom',   type: 'title',  name: '"The Phantom"',      rarity: 'epic',      cost: 550,  magic: 0,  emoji: '👁️',  desc: 'Appears from nowhere to top the board.' },
   { id: 'title_eternal',   type: 'title',  name: '"The Eternal"',      rarity: 'legendary', cost: 1200, magic: 0,  emoji: '♾️',  desc: 'Streaks that outlast empires.' },
+
+  // FROGS 🐸 — affordable themed set across every category
+  { id: 'sword_frog',      type: 'weapon',    name: 'Lilypad Blade',     rarity: 'rare', cost: 350, magic: 12, emoji: '🗡️', desc: 'Sharpened on a thousand pond stones. Ribbits on impact.' },
+  { id: 'armor_frog',      type: 'armor',     name: 'Frogskin Tunic',    rarity: 'rare', cost: 320, magic: 11, emoji: '🐸', desc: 'Slick, springy, and surprisingly waterproof.' },
+  { id: 'banner_frog',     type: 'banner',    name: 'Lilypad Banner',    rarity: 'rare', cost: 300, magic: 0,  color: 'linear-gradient(90deg,#14532d,#22c55e,#86efac)', desc: 'Floats serenely above the pond.' },
+  { id: 'badge_frog',      type: 'badge',     name: 'Frog Badge',        rarity: 'rare', cost: 300, magic: 0,  emoji: '🐸', desc: 'Hop to it.' },
+  { id: 'pet_frog',        type: 'companion', name: 'Pocket Frog',       rarity: 'rare', cost: 400, magic: 14, emoji: '🐸', desc: 'A loyal amphibian. Ribbits encouragement when you complete a habit.' },
+  { id: 'potion_frog',     type: 'consumable',name: 'Pond Brew',         rarity: 'rare', cost: 320, magic: 0,  emoji: '🧪', desc: 'A bubbling green tonic. Tastes faintly of swamp. Grants a modest XP boost.' },
+  { id: 'title_frog',      type: 'title',     name: '"The Frog Prince"', rarity: 'rare', cost: 350, magic: 0,  emoji: '🐸', desc: 'Royalty of the pond.' },
 ];
 
 const itemById = (id) => ITEMS.find(i => i.id === id);
