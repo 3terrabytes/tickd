@@ -305,3 +305,118 @@ input {
 }
 .battle-flash { animation: screen-flash 0.3s ease-out; }
 
+/* Camera shake on big impacts */
+@keyframes camera-shake {
+  0%, 100% { transform: translate(0, 0); }
+  10%      { transform: translate(-6px, -2px); }
+  20%      { transform: translate(6px, 2px); }
+  30%      { transform: translate(-5px, 1px); }
+  40%      { transform: translate(5px, -1px); }
+  50%      { transform: translate(-3px, 2px); }
+  60%      { transform: translate(3px, -2px); }
+  70%      { transform: translate(-2px, 1px); }
+  80%      { transform: translate(2px, 0); }
+  90%      { transform: translate(-1px, 0); }
+}
+.battle-shake { animation: camera-shake 0.45s ease-out; }
+
+/* Pre-battle banner — monster slides in from the right */
+@keyframes encounter-slide {
+  0%   { transform: translateX(100%) skewX(-12deg); opacity: 0; }
+  60%  { transform: translateX(-20px) skewX(-4deg); opacity: 1; }
+  100% { transform: translateX(0) skewX(0); opacity: 1; }
+}
+.encounter-banner { animation: encounter-slide 0.55s cubic-bezier(0.2, 0.8, 0.2, 1) forwards; }
+
+@keyframes encounter-out {
+  0%   { transform: translateX(0); opacity: 1; }
+  100% { transform: translateX(-100%); opacity: 0; }
+}
+.encounter-banner.leave { animation: encounter-out 0.4s ease-in forwards; }
+
+/* FIGHT! / VICTORY! / DEFEAT banners */
+@keyframes banner-pop {
+  0%   { transform: translate(-50%, -50%) scale(0.4) rotate(-8deg); opacity: 0; }
+  50%  { transform: translate(-50%, -50%) scale(1.2) rotate(2deg);  opacity: 1; }
+  70%  { transform: translate(-50%, -50%) scale(0.95) rotate(-1deg); opacity: 1; }
+  100% { transform: translate(-50%, -50%) scale(1) rotate(0deg);    opacity: 1; }
+}
+.battle-banner {
+  position: absolute; top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  font-family: 'Cinzel', serif; font-weight: 700; font-size: 56px;
+  letter-spacing: 0.08em; pointer-events: none; z-index: 5;
+  animation: banner-pop 0.7s cubic-bezier(0.34, 1.56, 0.64, 1);
+  text-shadow: 0 0 20px rgba(0,0,0,0.9), 4px 4px 0 rgba(0,0,0,0.5);
+}
+
+/* Dungeon stage background: stone gradient with subtle ambient pulse */
+@keyframes torch-flicker {
+  0%, 100% { opacity: 0.7; filter: brightness(1)   drop-shadow(0 0 8px #f59e0b66); }
+  20%      { opacity: 0.95; filter: brightness(1.3) drop-shadow(0 0 14px #fcd34d88); }
+  40%      { opacity: 0.6;  filter: brightness(0.85)drop-shadow(0 0 6px #f59e0b44); }
+  60%      { opacity: 1;    filter: brightness(1.2) drop-shadow(0 0 16px #fcd34d99); }
+  80%      { opacity: 0.7;  filter: brightness(0.95)drop-shadow(0 0 9px #f59e0b66); }
+}
+.dungeon-torch { animation: torch-flicker 2.5s ease-in-out infinite; }
+.dungeon-torch.right { animation-delay: 1.2s; }
+
+/* Loot pop from defeated monster */
+@keyframes loot-pop {
+  0%   { transform: translate(-50%, 0) scale(0);   opacity: 0; }
+  40%  { transform: translate(-50%, -30px) scale(1.4); opacity: 1; }
+  100% { transform: translate(-50%, -50px) scale(1); opacity: 0; }
+}
+.loot-pop { animation: loot-pop 1s ease-out forwards; }
+
+/* Boss-room background tint */
+.boss-room {
+  background: radial-gradient(circle at 50% 30%, rgba(127,29,29,0.4) 0%, #0a0a0f 70%) !important;
+  animation: boss-pulse 2.4s ease-in-out infinite;
+}
+@keyframes boss-pulse {
+  0%, 100% { box-shadow: inset 0 0 80px rgba(239,68,68,0.2); }
+  50%      { box-shadow: inset 0 0 120px rgba(239,68,68,0.45); }
+}
+
+/* Dungeon corridor — nodes connected by a dashed path */
+.corridor-node {
+  width: 32px; height: 32px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px; flex-shrink: 0; position: relative; z-index: 2;
+  transition: all 0.3s ease;
+}
+.corridor-node.cleared {
+  background: #10b981; color: #064e3b; border: 2px solid #6ee7b7;
+}
+.corridor-node.current {
+  background: #ef4444; color: white; border: 2px solid #fca5a5;
+  box-shadow: 0 0 16px #ef444488;
+  animation: bob 1.2s ease-in-out infinite;
+}
+.corridor-node.locked {
+  background: var(--bg3); color: var(--text-muted); border: 2px solid var(--border);
+}
+.corridor-node.boss {
+  background: #7f1d1d; color: #fde047; border: 2px solid #fbbf24;
+  box-shadow: 0 0 18px #fbbf2466;
+}
+
+/* Count-up reward numbers */
+@keyframes count-up-pop {
+  0%   { transform: scale(0.6); opacity: 0; }
+  60%  { transform: scale(1.15); opacity: 1; }
+  100% { transform: scale(1);   opacity: 1; }
+}
+.reward-counter { animation: count-up-pop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1); }
+
+/* HP-bar damage flash overlay */
+@keyframes hp-flash {
+  0%   { background: rgba(255,255,255,0.7); }
+  100% { background: transparent; }
+}
+.hp-flash-overlay {
+  position: absolute; inset: 0; pointer-events: none;
+  animation: hp-flash 0.4s ease-out;
+}
+

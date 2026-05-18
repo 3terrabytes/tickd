@@ -63,6 +63,7 @@ const PROJECTILE = {
 export default function DungeonPage() {
   const { user, refreshUser } = useAuth();
   const [loadout, setLoadout] = useState(null);  // { slots, slotDetails, available, weaponClass, magic, armor }
+  const [inventory, setInventory] = useState({ equipped: {} });
   const [run, setRun] = useState(null);          // { rooms: [monster, ...], currentIndex }
   const [hp, setHp] = useState(0);
   const [maxHp, setMaxHp] = useState(0);
@@ -80,6 +81,11 @@ export default function DungeonPage() {
   const [monsterAnim, setMonsterAnim] = useState('');
   const [projectile, setProjectile] = useState(null);
   const [damages, setDamages] = useState([]); // {id, target, value, crit, heal}
+  const [encounter, setEncounter] = useState(null); // monster being introduced
+  const [banner, setBanner] = useState(null);       // big centred banner text
+  const [stageShake, setStageShake] = useState(false);
+  const [lootDrop, setLootDrop] = useState(null);   // { xp, gold } pop above monster
+  const [rewardCount, setRewardCount] = useState({ xp: 0, gold: 0 });
 
   const addLog = (line) => setLog(l => [...l.slice(-8), line]);
   const popDamage = (target, value, opts = {}) => {
@@ -88,9 +94,50 @@ export default function DungeonPage() {
     setTimeout(() => setDamages(d => d.filter(x => x.id !== id)), 1100);
   };
 
+  // Centred banner ("FIGHT!" / "VICTORY!" / "DEFEAT") shown for ms milliseconds.
+  const flashBanner = (text, color, ms = 900) => {
+    setBanner({ text, color });
+    setTimeout(() => setBanner(null), ms);
+  };
+
+  // Shake the battle stage for big hits / crits / boss attacks.
+  const shake = (ms = 450) => {
+    setStageShake(true);
+    setTimeout(() => setStageShake(false), ms);
+  };
+
+  // Pre-battle encounter intro: shows the monster name + taunt sliding in,
+  // then resolves so the battle proper can start.
+  const showEncounter = async (monster) => {
+    setEncounter(monster);
+    await sleep(1400);
+    setEncounter(null);
+    flashBanner('FIGHT!', '#fca5a5', 700);
+    await sleep(600);
+  };
+
+  // Animate the reward XP/gold counters from 0 → final value.
+  const countUpReward = (xp, gold) => {
+    const steps = 22;
+    const dur = 800;
+    let i = 0;
+    const tick = setInterval(() => {
+      i++;
+      const t = Math.min(1, i / steps);
+      // ease-out cubic
+      const eased = 1 - Math.pow(1 - t, 3);
+      setRewardCount({ xp: Math.round(xp * eased), gold: Math.round(gold * eased) });
+      if (t >= 1) clearInterval(tick);
+    }, dur / steps);
+  };
+
   const loadLoadout = useCallback(async () => {
-    const data = await api.dungeon.loadout();
+    const [data, inv] = await Promise.all([
+      api.dungeon.loadout(),
+      api.avatar.inventory().catch(() => ({ equipped: {} })),
+    ]);
     setLoadout(data);
+    setInventory(inv);
   }, []);
 
   useEffect(() => { loadLoadout(); }, [loadLoadout]);
@@ -110,19 +157,24 @@ export default function DungeonPage() {
       setHp(mx);
       setMaxHp(mx);
       setMonsterHp(data.rooms[0].hp);
-      setBattleState('active');
       setCooldowns({ 0: 0, 1: 0, 2: 0, 3: 0 });
       setLog([]);
-      addLog(`You enter the dungeon. ${data.rooms[0].name} blocks your path.`);
+      addLog(`🚪 You step into the dungeon.`);
+      // Show encounter intro before battle starts.
+      await showEncounter(data.rooms[0]);
+      addLog(`${data.rooms[0].sprite} ${data.rooms[0].name} blocks your path. ${data.rooms[0].taunt}`);
+      setBattleState('active');
     } catch (err) {
       addLog('⚠ ' + err.message);
     }
     setBusy(false);
   };
 
-  const advanceRoom = () => {
+  const advanceRoom = async () => {
     const next = run.currentIndex + 1;
     if (next >= run.rooms.length) {
+      flashBanner('DUNGEON CLEARED', '#fde047', 1600);
+      await sleep(1700);
       addLog('🏆 You cleared the dungeon!');
       setRun(null);
       setBattleState('idle');
@@ -131,9 +183,12 @@ export default function DungeonPage() {
     const nextMonster = run.rooms[next];
     setRun({ ...run, currentIndex: next });
     setMonsterHp(nextMonster.hp);
-    setBattleState('active');
     setCooldowns({ 0: 0, 1: 0, 2: 0, 3: 0 });
-    addLog(`Next room: ${nextMonster.name}. ${nextMonster.taunt}`);
+    setRewardCount({ xp: 0, gold: 0 });
+    addLog(`🚪 You move to the next room.`);
+    await showEncounter(nextMonster);
+    addLog(`${nextMonster.sprite} ${nextMonster.name}. ${nextMonster.taunt}`);
+    setBattleState('active');
   };
 
   const claimReward = async () => {
@@ -144,6 +199,9 @@ export default function DungeonPage() {
       addLog(`🏆 +${res.xp} XP · +${res.gold} gold`);
       await refreshUser();
       setBattleState('rewarded');
+      // Animate the counters from 0 to the real values.
+      setRewardCount({ xp: 0, gold: 0 });
+      countUpReward(res.xp, res.gold);
     } catch (err) {
       addLog('⚠ ' + err.message);
     }
@@ -190,6 +248,10 @@ export default function DungeonPage() {
       const { dmg, crit } = rollDamage(attack, loadout.magic);
       setMonsterAnim('battle-monster-hurt');
       popDamage('monster', dmg, { crit });
+      // Heavy and crit attacks shake the camera.
+      if (crit || attack.animation === 'heavy' || attack.animation === 'shockwave' || attack.animation === 'lightning') {
+        shake();
+      }
       const newMonsterHp = Math.max(0, monsterHp - dmg);
       setMonsterHp(newMonsterHp);
       addLog(`${attack.emoji} ${attack.name} hits ${monster.name} for ${dmg}${crit ? ' (CRIT!)' : ''}.`);
@@ -209,8 +271,11 @@ export default function DungeonPage() {
 
       if (newMonsterHp <= 0) {
         setMonsterAnim('battle-monster-die');
+        setLootDrop({ xp: monster.xp, gold: monster.gold, id: Date.now() });
         addLog(`💀 ${monster.name} falls!`);
-        await sleep(900);
+        await sleep(700);
+        flashBanner('VICTORY!', '#fde047', 1100);
+        await sleep(600);
         setBattleState('won');
         setBusy(false);
         return;
@@ -241,11 +306,16 @@ export default function DungeonPage() {
     setPlayerAnim('');
 
     if (finalHp <= 0) {
-      setBattleState('lost');
+      shake(600);
+      flashBanner('DEFEAT', '#fca5a5', 1400);
       addLog('💀 You fall. No rewards earned.');
+      await sleep(900);
+      setBattleState('lost');
       setBusy(false);
       return;
     }
+    // Monsters always shake a bit on hit — feels weighty.
+    if (dmg > 15) shake(350);
 
     // Tick cooldowns down for all slots
     setCooldowns(c => {
@@ -285,12 +355,30 @@ export default function DungeonPage() {
   if (battleState === 'idle' || !run) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16, paddingBottom: 32 }}>
-        <div className="card" style={{ padding: 20, textAlign: 'center' }}>
-          <div style={{ fontSize: 48, marginBottom: 8 }}>⚔️</div>
-          <h2 style={{ fontFamily: 'Cinzel,serif', fontSize: 22, marginBottom: 4 }}>The Dungeon</h2>
-          <p style={{ color: 'var(--text-muted)', fontSize: 13, marginBottom: 20 }}>
+        <div className="card" style={{
+          padding: 20, textAlign: 'center', position: 'relative', overflow: 'hidden',
+          background: 'radial-gradient(circle at 50% 0%, rgba(127,29,29,0.25) 0%, transparent 60%), var(--bg2)',
+        }}>
+          <span className="dungeon-torch" style={{ position: 'absolute', top: 12, left: 12, fontSize: 22 }}>🔥</span>
+          <span className="dungeon-torch right" style={{ position: 'absolute', top: 12, right: 12, fontSize: 22 }}>🔥</span>
+
+          <div style={{ fontFamily: 'Cinzel,serif', fontSize: 11, color: 'var(--gold)', letterSpacing: '0.15em', marginBottom: 4 }}>
+            🏰 THE CATACOMBS
+          </div>
+          <h2 style={{ fontFamily: 'Cinzel,serif', fontSize: 26, marginBottom: 4 }}>The Dungeon</h2>
+          <p style={{ color: 'var(--text-muted)', fontSize: 13, marginBottom: 16 }}>
             Six rooms. Escalating monsters. A boss at the end. Die and you get nothing.
           </p>
+
+          {/* Avatar preview — your fighter, dressed for war */}
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 16 }}>
+            <div className="battle-idle" style={{
+              position: 'relative',
+              filter: 'drop-shadow(0 8px 16px rgba(0,0,0,0.5))',
+            }}>
+              <PixelCharacter appearance={user || {}} equipped={inventory.equipped} size={120} />
+            </div>
+          </div>
 
           <div style={{
             display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 10,
@@ -342,50 +430,84 @@ export default function DungeonPage() {
   const playerHpPct = (hp / maxHp) * 100;
   const monsterHpPct = (monsterHp / monster.hp) * 100;
 
+  const isBoss = monster.tier === 5;
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12, paddingBottom: 32 }}>
-      {/* Dungeon progression bar */}
-      <div className="card" style={{ padding: 12 }}>
-        <div style={{ fontSize: 11, color: 'var(--text-muted)', letterSpacing: '0.06em', fontWeight: 600, marginBottom: 6 }}>
-          ROOM {run.currentIndex + 1} OF {run.rooms.length}
+      {/* Dungeon corridor — rooms as connected nodes */}
+      <div className="card" style={{ padding: 14 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+          <div style={{ fontFamily: 'Cinzel,serif', fontSize: 13, color: 'var(--gold)' }}>
+            🏰 THE CATACOMBS
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)', letterSpacing: '0.06em', fontWeight: 600 }}>
+            ROOM {run.currentIndex + 1} OF {run.rooms.length}
+          </div>
         </div>
-        <div style={{ display: 'flex', gap: 6 }}>
-          {run.rooms.map((r, i) => (
-            <div key={i} style={{
-              flex: 1, height: 6, borderRadius: 99,
-              background: i < run.currentIndex ? '#10b981'
-                : i === run.currentIndex ? '#ef4444'
-                : 'var(--bg3)',
-            }} />
-          ))}
+        <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          {/* Dashed path behind the nodes */}
+          <div style={{
+            position: 'absolute', left: 16, right: 16, top: '50%',
+            borderTop: '2px dashed var(--border)', zIndex: 1,
+          }} />
+          {run.rooms.map((r, i) => {
+            const state = i < run.currentIndex ? 'cleared'
+              : i === run.currentIndex ? 'current'
+              : r.tier === 5 ? 'boss'
+              : 'locked';
+            return (
+              <div key={i}
+                className={`corridor-node ${state}`}
+                title={state === 'locked' ? '???' : r.name}>
+                {state === 'cleared' ? '✓'
+                  : r.tier === 5 ? '👑'
+                  : state === 'current' ? r.sprite
+                  : '?'}
+              </div>
+            );
+          })}
         </div>
       </div>
 
       {/* Battle stage */}
-      <div className="card" style={{
+      <div className={`card ${stageShake ? 'battle-shake' : ''} ${isBoss ? 'boss-room' : ''}`} style={{
         padding: 0, overflow: 'hidden', position: 'relative',
-        background: 'linear-gradient(180deg, #0c0c1a 0%, #1a1a2e 100%)',
+        background: isBoss
+          ? 'radial-gradient(circle at 50% 30%, rgba(127,29,29,0.4) 0%, #0a0a0f 70%)'
+          : 'radial-gradient(ellipse at 50% 30%, #1f1f3a 0%, #0a0a14 75%)',
+        border: `1px solid ${isBoss ? '#7f1d1d' : '#2a2a3a'}`,
+        minHeight: 320,
       }}>
-        <div style={{ padding: 16, position: 'relative', minHeight: 280 }}>
+        {/* Torches in the corners */}
+        <span className="dungeon-torch" style={{ position: 'absolute', top: 8, left: 8, fontSize: 22 }}>🔥</span>
+        <span className="dungeon-torch right" style={{ position: 'absolute', top: 8, right: 8, fontSize: 22 }}>🔥</span>
+
+        <div style={{ padding: 16, position: 'relative', minHeight: 320 }}>
 
           {/* HP bars */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-            <div style={{ flex: 1, marginRight: 12 }}>
-              <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 2 }}>{user?.username} (Lv {user?.level})</div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 14, gap: 12 }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 3, color: '#6ee7b7' }}>
+                {user?.username} <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>· Lv {user?.level}</span>
+              </div>
               <HpBar value={hp} max={maxHp} color="#10b981" />
             </div>
             <div style={{ flex: 1, textAlign: 'right' }}>
-              <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 2 }}>
-                {monster.name} <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>· T{monster.tier}</span>
+              <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 3, color: isBoss ? '#fde047' : '#fca5a5' }}>
+                {isBoss && '👑 '}{monster.name} <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>· T{monster.tier}</span>
               </div>
-              <HpBar value={monsterHp} max={monster.hp} color="#ef4444" />
+              <HpBar value={monsterHp} max={monster.hp} color={isBoss ? '#fbbf24' : '#ef4444'} />
             </div>
           </div>
 
           {/* Combatants */}
-          <div style={{ position: 'relative', height: 180, display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', padding: '0 20px' }}>
+          <div style={{ position: 'relative', height: 200, display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', padding: '0 30px' }}>
+            {/* Floor shadow under combatants */}
+            <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 20,
+              background: 'radial-gradient(ellipse at 50% 100%, rgba(0,0,0,0.6) 0%, transparent 70%)' }} />
+
             <div className={`${playerAnim || 'battle-idle'}`} style={{ position: 'relative' }}>
-              <PixelCharacter appearance={user || {}} size={120} />
+              <PixelCharacter appearance={user || {}} equipped={inventory.equipped} size={130} />
               {damages.filter(d => d.target === 'player').map(d => (
                 <div key={d.id} className={`battle-damage ${d.heal ? 'heal' : ''} ${d.crit ? 'crit' : ''}`}>
                   {d.heal ? `+${d.value}` : d.value}
@@ -400,13 +522,28 @@ export default function DungeonPage() {
               )}
             </div>
 
-            <div className={`${monsterAnim || 'battle-idle'}`} style={{ position: 'relative', fontSize: 100, lineHeight: 1 }}>
+            <div className={`${monsterAnim || 'battle-idle'}`} style={{
+              position: 'relative',
+              fontSize: isBoss ? 140 : 110, lineHeight: 1,
+              filter: isBoss ? 'drop-shadow(0 0 24px #ef444466)' : 'none',
+            }}>
               <span>{monster.sprite}</span>
               {damages.filter(d => d.target === 'monster').map(d => (
                 <div key={d.id} className={`battle-damage ${d.crit ? 'crit' : ''}`}>
                   {d.value}
                 </div>
               ))}
+              {/* Loot pop on death */}
+              {lootDrop && battleState === 'won' && (
+                <div key={lootDrop.id} className="loot-pop" style={{
+                  position: 'absolute', top: 10, left: '50%',
+                  fontFamily: 'Cinzel,serif', fontWeight: 700, fontSize: 18,
+                  color: '#fcd34d', textShadow: '0 0 8px rgba(0,0,0,0.9), 2px 2px 0 #7c2d12',
+                  whiteSpace: 'nowrap',
+                }}>
+                  +{lootDrop.xp} XP · +{lootDrop.gold} 💰
+                </div>
+              )}
             </div>
 
             {projectile && (
@@ -415,6 +552,30 @@ export default function DungeonPage() {
               </span>
             )}
           </div>
+
+          {/* Encounter intro overlay — monster slides in with name + taunt */}
+          {encounter && (
+            <div className="encounter-banner" style={{
+              position: 'absolute', inset: 0, zIndex: 6,
+              display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+              background: 'linear-gradient(90deg, transparent 0%, rgba(0,0,0,0.85) 30%, rgba(0,0,0,0.85) 70%, transparent 100%)',
+            }}>
+              <div style={{ fontSize: 80, marginBottom: 6 }}>{encounter.sprite}</div>
+              <div style={{ fontFamily: 'Cinzel,serif', fontSize: 24, fontWeight: 700, color: encounter.tier === 5 ? '#fde047' : '#fca5a5' }}>
+                {encounter.tier === 5 && '👑 '}{encounter.name}
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4, fontStyle: 'italic' }}>
+                "{encounter.taunt}"
+              </div>
+            </div>
+          )}
+
+          {/* Centred banner (FIGHT! / VICTORY! / DEFEAT) */}
+          {banner && (
+            <div className="battle-banner" style={{ color: banner.color }}>
+              {banner.text}
+            </div>
+          )}
         </div>
       </div>
 
@@ -444,25 +605,43 @@ export default function DungeonPage() {
       )}
 
       {battleState === 'won' && (
-        <div className="card animate-fade" style={{ padding: 16, textAlign: 'center', borderColor: '#10b98166', background: 'rgba(16,185,129,0.08)' }}>
-          <div style={{ fontSize: 32, marginBottom: 4 }}>🏆</div>
-          <div style={{ fontFamily: 'Cinzel,serif', fontSize: 18, color: '#6ee7b7', marginBottom: 4 }}>Victory!</div>
-          <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 12 }}>
-            You earned {monster.xp} XP and {monster.gold} gold.
+        <div className="card animate-fade" style={{
+          padding: 18, textAlign: 'center',
+          borderColor: '#10b98166', background: 'rgba(16,185,129,0.08)',
+        }}>
+          <div style={{ fontSize: 36, marginBottom: 4 }}>🏆</div>
+          <div style={{ fontFamily: 'Cinzel,serif', fontSize: 20, color: '#6ee7b7', marginBottom: 8 }}>Victory!</div>
+          <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 14 }}>
+            Spoils: {monster.xp} XP &amp; {monster.gold} gold await
           </div>
-          <button className="btn btn-primary" onClick={claimReward} style={{ padding: '10px 24px' }}>
-            Claim Rewards
+          <button className="btn btn-primary" onClick={claimReward}
+            style={{ padding: '10px 28px', fontSize: 14, background: '#059669', borderColor: '#10b981' }}>
+            🏆 Claim Rewards
           </button>
         </div>
       )}
 
       {battleState === 'rewarded' && (
-        <div className="card animate-fade" style={{ padding: 16, textAlign: 'center' }}>
-          <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 12 }}>
-            +{reward?.xp} XP · +{reward?.gold} gold
+        <div className="card animate-fade" style={{
+          padding: 18, textAlign: 'center',
+          borderColor: '#f59e0b66', background: 'rgba(245,158,11,0.08)',
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'center', gap: 24, marginBottom: 14 }}>
+            <div className="reward-counter">
+              <div style={{ fontSize: 10, color: 'var(--text-muted)', letterSpacing: '0.08em', fontWeight: 600 }}>XP GAINED</div>
+              <div style={{ fontFamily: 'Cinzel,serif', fontSize: 28, fontWeight: 700, color: '#a78bfa' }}>
+                +{rewardCount.xp}
+              </div>
+            </div>
+            <div className="reward-counter" style={{ animationDelay: '0.15s' }}>
+              <div style={{ fontSize: 10, color: 'var(--text-muted)', letterSpacing: '0.08em', fontWeight: 600 }}>GOLD</div>
+              <div style={{ fontFamily: 'Cinzel,serif', fontSize: 28, fontWeight: 700, color: '#fbbf24' }}>
+                +{rewardCount.gold} 💰
+              </div>
+            </div>
           </div>
-          <button className="btn btn-gold" onClick={advanceRoom} style={{ padding: '10px 24px' }}>
-            {run.currentIndex + 1 >= run.rooms.length ? 'Exit Dungeon' : 'Next Room →'}
+          <button className="btn btn-gold" onClick={advanceRoom} style={{ padding: '10px 28px', fontSize: 14 }}>
+            {run.currentIndex + 1 >= run.rooms.length ? '🚪 Exit Dungeon' : '🚪 Next Room →'}
           </button>
         </div>
       )}

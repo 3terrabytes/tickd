@@ -56,15 +56,6 @@ function Layout({ children }) {
             <NavLink to="/avatar" style={({ isActive }) => ({ ...styles.navLink, ...(isActive ? styles.navLinkActive : {}) })}>
               Avatar
             </NavLink>
-            <NavLink to="/stats" style={({ isActive }) => ({ ...styles.navLink, ...(isActive ? styles.navLinkActive : {}) })}>
-              Stats
-            </NavLink>
-            <NavLink to="/achievements" style={({ isActive }) => ({ ...styles.navLink, ...(isActive ? styles.navLinkActive : {}) })}>
-              Trophies
-            </NavLink>
-            <NavLink to="/dungeon" style={({ isActive }) => ({ ...styles.navLink, ...(isActive ? styles.navLinkActive : {}), color: isActive ? 'var(--text)' : '#fca5a5' })}>
-              ⚔️ Dungeon
-            </NavLink>
             <NavLink to="/suggestions" style={({ isActive }) => ({ ...styles.navLink, ...(isActive ? styles.navLinkActive : {}) })}>
               Suggest
             </NavLink>
