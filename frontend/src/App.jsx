@@ -12,6 +12,7 @@ import ProfilePage from './pages/ProfilePage';
 import TermsPage from './pages/TermsPage';
 import AchievementsPage from './pages/AchievementsPage';
 import StatsPage from './pages/StatsPage';
+import AdminPage from './pages/AdminPage';
 import UpdateModal from './components/UpdateModal';
 import FeaturesDebreifModal from './components/FeaturesDebreifModal';
 import SuspensionWarning from './components/SuspensionWarning';
@@ -63,6 +64,11 @@ function Layout({ children }) {
             <NavLink to="/suggestions" style={({ isActive }) => ({ ...styles.navLink, ...(isActive ? styles.navLinkActive : {}) })}>
               Suggest
             </NavLink>
+            {isAdminUser(user) && (
+              <NavLink to="/admin" style={({ isActive }) => ({ ...styles.navLink, ...(isActive ? styles.navLinkActive : {}), color: 'var(--gold)' })}>
+                ⚡ Admin
+              </NavLink>
+            )}
           </nav>
 
           <button className="btn btn-ghost" style={{ padding: '8px 14px', fontSize: 13 }} onClick={logout}>
@@ -90,6 +96,15 @@ function Protected({ children }) {
   return user ? children : <Navigate to="/auth" replace />;
 }
 
+// Admins are users with the is_admin flag, plus the bootstrap "thedevs" account.
+const isAdminUser = (u) => !!u?.is_admin || (u?.username || '').toLowerCase() === 'thedevs';
+
+function AdminGuard({ children }) {
+  const { user } = useAuth();
+  if (!isAdminUser(user)) return <Navigate to="/" replace />;
+  return children;
+}
+
 export default function App() {
   return (
     <AuthProvider>
@@ -103,6 +118,7 @@ export default function App() {
           <Route path="/achievements" element={<Protected><Layout><AchievementsPage /></Layout></Protected>} />
           <Route path="/suggestions" element={<Protected><Layout><SuggestionsPage /></Layout></Protected>} />
           <Route path="/settings" element={<Protected><Layout><SettingsPage /></Layout></Protected>} />
+          <Route path="/admin" element={<Protected><AdminGuard><Layout><AdminPage /></Layout></AdminGuard></Protected>} />
           <Route path="/users/:username" element={<ProfilePage />} />
           <Route path="/terms" element={<TermsPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
