@@ -44,9 +44,7 @@ export default function BanScreen() {
     if (new Date(user.suspended_until).getTime() <= Date.now()) {
       refreshUser();
     }
-    // tick is intentionally in the dep list so the check runs each second
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tick, isTemp, user?.suspended_until]);
+  }, [tick, isTemp, user?.suspended_until, refreshUser]);
 
   if (!isBanned) return null;
 
