@@ -148,6 +148,15 @@ const initDB = async () => {
 
     -- Suggestion admin status: open | planned | done | rejected
     ALTER TABLE suggestions ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'open';
+
+    -- Dungeon: per-user 4-slot attack loadout
+    CREATE TABLE IF NOT EXISTS user_attacks (
+      user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      slot1 VARCHAR(40),
+      slot2 VARCHAR(40),
+      slot3 VARCHAR(40),
+      slot4 VARCHAR(40)
+    );
   `);
   // Grant infinite gold + admin flag to theDevs account (if it exists)
   await pool.query(`

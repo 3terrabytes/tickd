@@ -286,6 +286,40 @@ const PACKS = [
   },
 ];
 
+// Derive a weaponClass for every weapon by inspecting its id prefix. This lets
+// the dungeon decide which attacks the player can use with their current
+// weapon without us having to hand-tag every item row.
+const WEAPON_CLASS_BY_PREFIX = {
+  sword:  'sword',
+  blade:  'sword',
+  staff:  'staff',
+  bow:    'bow',
+  axe:    'axe',
+  dagger: 'dagger',
+  hammer: 'hammer',
+  wand:   'wand',
+  lance:  'lance',
+  scythe: 'scythe',
+};
+
+const weaponClassOf = (item) => {
+  if (!item || item.type !== 'weapon') return null;
+  // Handle ids like 'weapon_cyber' or 'weapon_tide_blade' (themed weapons —
+  // treat them as swords by default since they're blade-shaped emojis).
+  const prefix = item.id.split('_')[0];
+  if (prefix === 'weapon') {
+    // Themed weapon ids fall back to the second token, then default to sword.
+    const second = item.id.split('_')[1];
+    return WEAPON_CLASS_BY_PREFIX[second] || 'sword';
+  }
+  return WEAPON_CLASS_BY_PREFIX[prefix] || 'sword';
+};
+
+// Patch every weapon with its derived class once at module load.
+for (const item of ITEMS) {
+  if (item.type === 'weapon') item.weaponClass = weaponClassOf(item);
+}
+
 const itemById = (id) => ITEMS.find(i => i.id === id);
 const packById = (id) => PACKS.find(p => p.id === id);
 
@@ -302,4 +336,4 @@ const packDiscount = (pack) => {
   return Math.max(0, Math.round((1 - pack.cost / full) * 100));
 };
 
-module.exports = { ITEMS, RARITIES, PACKS, itemById, packById, packFullCost, packDiscount };
+module.exports = { ITEMS, RARITIES, PACKS, itemById, packById, packFullCost, packDiscount, weaponClassOf };

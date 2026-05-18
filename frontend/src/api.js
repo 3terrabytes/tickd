@@ -96,4 +96,12 @@ export const api = {
   stats: {
     get: () => req('GET', '/stats'),
   },
+  dungeon: {
+    loadout: () => req('GET', '/dungeon/loadout'),
+    saveLoadout: (slots) => req('POST', '/dungeon/loadout', { slots }),
+    startRun: () => req('POST', '/dungeon/run'),
+    reward: (monsterId) => req('POST', '/dungeon/reward', { monsterId }),
+    attacks: () => req('GET', '/dungeon/attacks'),
+    monsters: () => req('GET', '/dungeon/monsters'),
+  },
 };

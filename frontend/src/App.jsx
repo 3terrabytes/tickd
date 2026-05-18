@@ -13,6 +13,7 @@ import TermsPage from './pages/TermsPage';
 import AchievementsPage from './pages/AchievementsPage';
 import StatsPage from './pages/StatsPage';
 import AdminPage from './pages/AdminPage';
+import DungeonPage from './pages/DungeonPage';
 import UpdateModal from './components/UpdateModal';
 import FeaturesDebreifModal from './components/FeaturesDebreifModal';
 import SuspensionWarning from './components/SuspensionWarning';
@@ -60,6 +61,9 @@ function Layout({ children }) {
             </NavLink>
             <NavLink to="/achievements" style={({ isActive }) => ({ ...styles.navLink, ...(isActive ? styles.navLinkActive : {}) })}>
               Trophies
+            </NavLink>
+            <NavLink to="/dungeon" style={({ isActive }) => ({ ...styles.navLink, ...(isActive ? styles.navLinkActive : {}), color: isActive ? 'var(--text)' : '#fca5a5' })}>
+              ⚔️ Dungeon
             </NavLink>
             <NavLink to="/suggestions" style={({ isActive }) => ({ ...styles.navLink, ...(isActive ? styles.navLinkActive : {}) })}>
               Suggest
@@ -119,6 +123,7 @@ export default function App() {
           <Route path="/suggestions" element={<Protected><Layout><SuggestionsPage /></Layout></Protected>} />
           <Route path="/settings" element={<Protected><Layout><SettingsPage /></Layout></Protected>} />
           <Route path="/admin" element={<Protected><AdminGuard><Layout><AdminPage /></Layout></AdminGuard></Protected>} />
+          <Route path="/dungeon" element={<Protected><Layout><DungeonPage /></Layout></Protected>} />
           <Route path="/users/:username" element={<ProfilePage />} />
           <Route path="/terms" element={<TermsPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />

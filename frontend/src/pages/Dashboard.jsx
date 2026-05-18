@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { Link } from 'react-router-dom';
 import { api } from '../api';
 import { useAuth } from '../context/AuthContext';
 import { levelTitle, xpForLevel } from '../utils/xp';
@@ -136,6 +137,21 @@ export default function Dashboard() {
                   🛡️ Shield
                 </span>
               )}
+            </div>
+            {/* Quick-access icons under username */}
+            <div style={styles.quickIcons}>
+              <Link to="/stats" title="View detailed stats" style={styles.quickIcon}>
+                <span style={{ fontSize: 14 }}>📊</span>
+                <span>Stats</span>
+              </Link>
+              <Link to="/achievements" title="View trophies & achievements" style={styles.quickIcon}>
+                <span style={{ fontSize: 14 }}>🏆</span>
+                <span>Trophies</span>
+              </Link>
+              <Link to="/dungeon" title="Enter the dungeon" style={{ ...styles.quickIcon, color: '#fca5a5', borderColor: '#ef444455' }}>
+                <span style={{ fontSize: 14 }}>⚔️</span>
+                <span>Dungeon</span>
+              </Link>
             </div>
             <div style={{ marginTop: 8 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
@@ -347,6 +363,17 @@ const styles = {
     background: 'rgba(59, 130, 246, 0.15)', color: '#60a5fa',
     border: '1px solid #3b82f655',
     padding: '2px 8px', borderRadius: 99, fontSize: 11, fontWeight: 600
+  },
+  quickIcons: {
+    display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap',
+  },
+  quickIcon: {
+    display: 'inline-flex', alignItems: 'center', gap: 4,
+    padding: '3px 9px', borderRadius: 99,
+    background: 'var(--bg3)', border: '1px solid var(--border)',
+    color: 'var(--text-muted)', textDecoration: 'none',
+    fontSize: 11, fontWeight: 500,
+    transition: 'all 0.15s',
   },
   statsCol: { display: 'flex', gap: 12, flexShrink: 0 },
   statItem: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 },

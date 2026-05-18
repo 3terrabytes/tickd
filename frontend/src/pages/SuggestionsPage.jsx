@@ -1,6 +1,15 @@
 import { useState, useEffect } from 'react';
 import { api } from '../api';
 
+// Admin-set status badges shown on each suggestion card. Mirrors the colours
+// used in the admin tool so it's recognisable across both screens.
+const STATUS_BADGE = {
+  open:     { label: 'Open',     bg: '#1e293b', fg: '#94a3b8' },
+  planned:  { label: 'Planned',  bg: '#1e3a8a', fg: '#93c5fd' },
+  done:     { label: 'Done',     bg: '#064e3b', fg: '#6ee7b7' },
+  rejected: { label: 'Rejected', bg: '#7f1d1d', fg: '#fca5a5' },
+};
+
 export default function SuggestionsPage() {
   const [suggestions, setSuggestions] = useState([]);
   const [title, setTitle]             = useState('');
@@ -126,7 +135,20 @@ export default function SuggestionsPage() {
 
             {/* Content */}
             <div style={{ flex:1, minWidth:0 }}>
-              <div style={{ fontWeight:600, fontSize:15, marginBottom:4 }}>{s.title}</div>
+              <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:4, flexWrap:'wrap' }}>
+                <span style={{ fontWeight:600, fontSize:15 }}>{s.title}</span>
+                {s.status && s.status !== 'open' && STATUS_BADGE[s.status] && (
+                  <span style={{
+                    fontSize:10, fontWeight:700, letterSpacing:'0.05em',
+                    padding:'2px 8px', borderRadius:99,
+                    background: STATUS_BADGE[s.status].bg,
+                    color: STATUS_BADGE[s.status].fg,
+                    textTransform:'uppercase',
+                  }}>
+                    {STATUS_BADGE[s.status].label}
+                  </span>
+                )}
+              </div>
               {s.description && <p style={{ color:'var(--text-muted)', fontSize:13, marginBottom:6 }}>{s.description}</p>}
               <div style={{ fontSize:11, color:'var(--text-muted)' }}>
                 by {s.username || 'Anonymous'} · {new Date(s.created_at).toLocaleDateString()}
