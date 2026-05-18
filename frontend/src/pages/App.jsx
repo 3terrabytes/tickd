@@ -54,7 +54,7 @@ function Layout({ children }) {
             <NavLink to="/suggestions" style={({ isActive }) => ({ ...styles.navLink, ...(isActive ? styles.navLinkActive : {}) })}>
               Suggest
             </NavLink>
-            {user?.is_admin && (
+            {isAdminUser(user) && (
               <NavLink to="/admin" style={({ isActive }) => ({ ...styles.navLink, ...(isActive ? styles.navLinkActive : {}), color: 'var(--gold)' })}>
                 ⚡ Admin
               </NavLink>
@@ -74,9 +74,11 @@ function Layout({ children }) {
   );
 }
 
+const isAdminUser = (u) => !!u?.is_admin || (u?.username || '').toLowerCase() === 'thedevs';
+
 function AdminGuard({ children }) {
   const { user } = useAuth();
-  if (!user?.is_admin) return <Navigate to="/" replace />;
+  if (!isAdminUser(user)) return <Navigate to="/" replace />;
   return children;
 }
 

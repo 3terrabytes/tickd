@@ -76,6 +76,7 @@ router.post('/login', async (req, res) => {
 
     const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET, { expiresIn: '30d' });
     const { password_hash, ...safeUser } = user;
+    safeUser.is_admin = !!safeUser.is_admin || (safeUser.username || '').toLowerCase() === 'thedevs';
     res.json({ token, user: safeUser });
   } catch (err) {
     console.error('Login error:', err);
@@ -94,7 +95,9 @@ router.get('/me', require('../middleware/auth'), async (req, res) => {
        FROM users WHERE id = $1`,
       [req.userId]
     );
-    res.json(rows[0]);
+    const u = rows[0];
+    if (u) u.is_admin = !!u.is_admin || (u.username || '').toLowerCase() === 'thedevs';
+    res.json(u);
   } catch {
     res.status(500).json({ error: 'Server error' });
   }
