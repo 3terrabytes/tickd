@@ -18,6 +18,19 @@ const rarityOf = (item) => (item && RARITY_STYLES[item.rarity]) || RARITY_FALLBA
 const SLOT_LABELS = { weapon: '🗡️ Weapon', armor: '🛡️ Armor', banner: '🏷️ Banner', badge: '🎖️ Badge', companion: '🐾 Companion', title: '📛 Title' };
 const TYPES = ['weapon', 'armor', 'banner', 'badge', 'companion', 'title'];
 
+// Used as section headers when the shop is showing every type at once.
+// Ordering here also controls render order in the "All" view.
+const SECTION_ORDER = ['weapon', 'armor', 'banner', 'badge', 'companion', 'title', 'consumable'];
+const SECTION_LABELS = {
+  weapon:     '🗡️ Weapons',
+  armor:      '🛡️ Armor',
+  banner:     '🏷️ Banners',
+  badge:      '🎖️ Badges',
+  companion:  '🐾 Companions',
+  title:      '📛 Titles',
+  consumable: '🧪 Consumables',
+};
+
 // Sort order for rarities — used by the shop sort dropdown.
 const RARITY_ORDER = { common: 0, rare: 1, epic: 2, legendary: 3 };
 
@@ -51,6 +64,9 @@ export default function AvatarPage() {
   const [confirmUse, setConfirmUse] = useState(null);
   const [toast, setToast] = useState(null);
   const [previewItem, setPreviewItem] = useState(null);
+  // Gift-from-shop modal state. `target` is { kind: 'item' | 'pack', data }.
+  const [giftTarget, setGiftTarget] = useState(null);
+  const [friends, setFriends] = useState([]);
 
   // Preview is only meaningful on Shop/Inventory — clear when leaving those tabs
   // so a Shop preview can't leak into Inventory (the "Equip this" CTA depends on
@@ -75,10 +91,34 @@ export default function AvatarPage() {
   };
 
   const load = async () => {
-    const [shop, inv] = await Promise.all([api.avatar.shop(), api.avatar.inventory()]);
+    const [shop, inv, friendList] = await Promise.all([
+      api.avatar.shop(),
+      api.avatar.inventory(),
+      api.friends.list().catch(() => []),
+    ]);
     setShopData(shop);
     setInventory(inv);
+    setFriends(friendList || []);
     await refreshUser();
+  };
+
+  // Gift purchase actions — used by the modal.
+  const sendGiftItem = async (item, friendId, message) => {
+    try {
+      const res = await api.gifts.purchase(item.id, { receiver_id: friendId, message });
+      showToast(`🎁 Sent ${item.name}! +${res.xp_gained} XP`);
+      setGiftTarget(null);
+      await load();
+    } catch (err) { showToast(err.message, 'error'); }
+  };
+
+  const sendGiftPack = async (pack, friendId, message) => {
+    try {
+      const res = await api.gifts.purchasePack(pack.id, { receiver_id: friendId, message });
+      showToast(`🎁 Sent ${pack.name} (${res.grantedIds.length} items)! +${res.xp_gained} XP`);
+      setGiftTarget(null);
+      await load();
+    } catch (err) { showToast(err.message, 'error'); }
   };
 
   useEffect(() => { load(); }, []);
@@ -245,6 +285,18 @@ export default function AvatarPage() {
           padding: '10px 20px', borderRadius: 10, fontWeight: 500, fontSize: 14,
           zIndex: 200, whiteSpace: 'nowrap', boxShadow: '0 4px 20px rgba(0,0,0,0.5)'
         }} className="animate-fade">{toast.msg}</div>
+      )}
+
+      {giftTarget && (
+        <GiftModal
+          target={giftTarget}
+          friends={friends}
+          onCancel={() => setGiftTarget(null)}
+          onConfirm={(friendId, msg) => {
+            if (giftTarget.kind === 'item') sendGiftItem(giftTarget.data, friendId, msg);
+            else sendGiftPack(giftTarget.data, friendId, msg);
+          }}
+        />
       )}
 
       {confirmUse && (
@@ -511,20 +563,16 @@ export default function AvatarPage() {
                     canAfford={(pack.cost || 0) <= currentGold}
                     buying={buyingPack === pack.id}
                     onBuy={() => buyPack(pack)}
+                    onGift={() => setGiftTarget({ kind: 'pack', data: pack })}
                   />
                 ))}
               </div>
             </div>
           )}
 
-          {filteredShop.length === 0 && shopFilter !== 'pack' ? (
-            <div style={styles.empty}>
-              <div style={{ fontSize: 40, marginBottom: 8 }}>🔍</div>
-              <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>No items match those filters.</p>
-            </div>
-          ) : (
-          <div style={styles.grid}>
-            {filteredShop.map(item => {
+          {(() => {
+            // Renders a single shop-item card. Used in both flat and sectioned layouts.
+            const renderItem = (item) => {
               const owned = shopData.ownedIds.includes(item.id);
               const canAfford = (user?.gold || shopData.gold) >= item.cost;
               const r = rarityOf(item);
@@ -551,26 +599,71 @@ export default function AvatarPage() {
                   {item.magic > 0 && (
                     <div style={{ fontSize: 11, color: '#a78bfa', marginBottom: 6 }}>✨ {item.magic} Magic</div>
                   )}
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 4 }}>
                     <span style={{ color: '#f59e0b', fontWeight: 700, fontSize: 13 }}>💰 {item.cost}</span>
-                    {owned && item.type !== 'consumable' ? (
-                      <span style={{ fontSize: 12, color: 'var(--green)' }}>✓ Owned</span>
-                    ) : (
+                    <div style={{ display: 'flex', gap: 4 }}>
                       <button
-                        className="btn btn-primary"
-                        style={{ padding: '6px 12px', fontSize: 12, opacity: canAfford ? 1 : 0.4 }}
-                        disabled={!canAfford || buying === item.id}
-                        onClick={(e) => { e.stopPropagation(); buy(item); }}
+                        title="Buy and send to a friend"
+                        style={{
+                          padding: '6px 8px', fontSize: 12, borderRadius: 6,
+                          background: 'transparent', border: '1px solid var(--border)',
+                          color: canAfford ? '#f472b6' : 'var(--text-muted)',
+                          cursor: 'pointer', opacity: canAfford ? 1 : 0.4,
+                        }}
+                        disabled={!canAfford}
+                        onClick={(e) => { e.stopPropagation(); setGiftTarget({ kind: 'item', data: item }); }}
                       >
-                        {buying === item.id ? '...' : 'Buy'}
+                        🎁
                       </button>
-                    )}
+                      {owned && item.type !== 'consumable' ? (
+                        <span style={{ fontSize: 12, color: 'var(--green)', padding: '6px 4px' }}>✓ Owned</span>
+                      ) : (
+                        <button
+                          className="btn btn-primary"
+                          style={{ padding: '6px 12px', fontSize: 12, opacity: canAfford ? 1 : 0.4 }}
+                          disabled={!canAfford || buying === item.id}
+                          onClick={(e) => { e.stopPropagation(); buy(item); }}
+                        >
+                          {buying === item.id ? '...' : 'Buy'}
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
               );
-            })}
-          </div>
-          )}
+            };
+
+            if (filteredShop.length === 0 && shopFilter !== 'pack') {
+              return (
+                <div style={styles.empty}>
+                  <div style={{ fontSize: 40, marginBottom: 8 }}>🔍</div>
+                  <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>No items match those filters.</p>
+                </div>
+              );
+            }
+
+            // For the 'all' view, group items by type so the shop feels organised
+            // instead of a flat wall. For specific filters, just render one grid.
+            if (shopFilter === 'all') {
+              const groups = {};
+              for (const item of filteredShop) {
+                (groups[item.type] = groups[item.type] || []).push(item);
+              }
+              return SECTION_ORDER.filter(t => groups[t]?.length).map(type => (
+                <div key={type} style={{ marginBottom: 22 }}>
+                  <div style={styles.sectionHeader}>
+                    <span>{SECTION_LABELS[type]}</span>
+                    <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 500 }}>
+                      {groups[type].length} items
+                    </span>
+                  </div>
+                  <div style={styles.grid}>{groups[type].map(renderItem)}</div>
+                </div>
+              ));
+            }
+
+            return <div style={styles.grid}>{filteredShop.map(renderItem)}</div>;
+          })()}
           </div>
         </div>
       )}
@@ -769,7 +862,7 @@ function ToggleChip({ active, onClick, children }) {
 }
 
 // Pack / bundle card — shown in the shop's "Bundles" row.
-function PackCard({ pack, ownedSet, canAfford, buying, onBuy }) {
+function PackCard({ pack, ownedSet, canAfford, buying, onBuy, onGift }) {
   const r = RARITY_STYLES[pack.rarity] || RARITY_FALLBACK;
   const partialOwned = (pack.items || []).some(id => ownedSet.has(id));
   const itemCount = (pack.items || []).length;
@@ -812,16 +905,148 @@ function PackCard({ pack, ownedSet, canAfford, buying, onBuy }) {
           ⚠ You own some of these — buy the rest individually.
         </div>
       )}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 4 }}>
         <span style={{ color: '#f59e0b', fontWeight: 700, fontSize: 14 }}>💰 {pack.cost}</span>
-        <button
-          className="btn btn-primary"
-          style={{ padding: '6px 12px', fontSize: 12, opacity: canAfford && !partialOwned ? 1 : 0.4 }}
-          disabled={!canAfford || partialOwned || buying}
-          onClick={onBuy}
-        >
-          {buying ? '...' : 'Buy bundle'}
-        </button>
+        <div style={{ display: 'flex', gap: 4 }}>
+          <button
+            title="Buy and send to a friend"
+            style={{
+              padding: '6px 8px', fontSize: 12, borderRadius: 6,
+              background: 'transparent', border: '1px solid var(--border)',
+              color: canAfford ? '#f472b6' : 'var(--text-muted)',
+              cursor: 'pointer',
+              opacity: canAfford ? 1 : 0.4,
+            }}
+            disabled={!canAfford}
+            onClick={onGift}
+          >
+            🎁
+          </button>
+          <button
+            className="btn btn-primary"
+            style={{ padding: '6px 12px', fontSize: 12, opacity: canAfford && !partialOwned ? 1 : 0.4 }}
+            disabled={!canAfford || partialOwned || buying}
+            onClick={onBuy}
+          >
+            {buying ? '...' : 'Buy bundle'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Pick-a-friend modal triggered by the 🎁 button on shop items or packs.
+// `target` is { kind: 'item' | 'pack', data }.
+function GiftModal({ target, friends, onCancel, onConfirm }) {
+  const [friendId, setFriendId] = useState(friends[0]?.id || null);
+  const [message, setMessage] = useState('');
+  const [sending, setSending] = useState(false);
+
+  const isPack = target.kind === 'pack';
+  const subject = target.data;
+  const r = RARITY_STYLES[subject.rarity] || RARITY_FALLBACK;
+
+  const submit = async () => {
+    if (!friendId) return;
+    setSending(true);
+    try { await onConfirm(friendId, message); }
+    finally { setSending(false); }
+  };
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 300, padding: 20,
+    }}>
+      <div className="card animate-fade" style={{
+        maxWidth: 420, width: '100%', padding: 22, borderColor: '#f472b666',
+      }}>
+        <div style={{ textAlign: 'center', marginBottom: 14 }}>
+          <div style={{ fontSize: 32, marginBottom: 4 }}>🎁</div>
+          <h3 style={{ fontFamily: 'Cinzel,serif', fontSize: 18, marginBottom: 2 }}>
+            Send {isPack ? 'Bundle' : 'Gift'}
+          </h3>
+          <div style={{ fontSize: 13, color: r.color, fontWeight: 600 }}>
+            {isPack ? subject.emoji : subject.emoji} {subject.name}
+          </div>
+          {isPack && (
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+              {(subject.items || []).length} items
+            </div>
+          )}
+          <div style={{ color: '#f59e0b', fontWeight: 700, marginTop: 6 }}>💰 {subject.cost} gold</div>
+        </div>
+
+        {friends.length === 0 ? (
+          <div style={{ padding: '20px 8px', textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>
+            You have no friends to gift to yet. Add some from the Friends tab!
+          </div>
+        ) : (
+          <>
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', letterSpacing: '0.05em', fontWeight: 600, marginBottom: 6 }}>
+                RECIPIENT
+              </div>
+              <div style={{
+                display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 6,
+                maxHeight: 200, overflowY: 'auto',
+              }}>
+                {friends.map(f => {
+                  const active = friendId === f.id;
+                  return (
+                    <button key={f.id} onClick={() => setFriendId(f.id)} style={{
+                      padding: '8px 10px', borderRadius: 8, cursor: 'pointer',
+                      background: active ? 'rgba(244,114,182,0.15)' : 'var(--bg3)',
+                      border: `1px solid ${active ? '#f472b6' : 'var(--border)'}`,
+                      color: 'var(--text)', textAlign: 'left', fontSize: 12,
+                    }}>
+                      <div style={{ fontWeight: 600 }}>{f.username}</div>
+                      <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>Lv. {f.level}</div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', letterSpacing: '0.05em', fontWeight: 600, marginBottom: 6 }}>
+                MESSAGE (optional)
+              </div>
+              <textarea
+                value={message}
+                onChange={e => setMessage(e.target.value)}
+                placeholder="A short note…"
+                maxLength={200}
+                rows={2}
+                style={{
+                  width: '100%', boxSizing: 'border-box',
+                  padding: '8px 12px', borderRadius: 8,
+                  background: 'var(--bg3)', border: '1px solid var(--border)',
+                  color: 'var(--text)', fontSize: 13, fontFamily: 'inherit',
+                  resize: 'vertical',
+                }}
+              />
+            </div>
+          </>
+        )}
+
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+          <button className="btn btn-ghost" onClick={onCancel}
+            style={{ padding: '8px 16px', fontSize: 13 }}>Cancel</button>
+          <button
+            onClick={submit}
+            disabled={!friendId || sending || friends.length === 0}
+            className="btn btn-primary"
+            style={{
+              padding: '8px 18px', fontSize: 13,
+              background: '#be185d', borderColor: '#f472b6',
+              opacity: (!friendId || sending) ? 0.5 : 1,
+            }}
+          >
+            {sending ? 'Sending…' : `🎁 Send · 💰 ${subject.cost}`}
+          </button>
+        </div>
       </div>
     </div>
   );

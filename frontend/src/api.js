@@ -69,6 +69,8 @@ export const api = {
   },
   gifts: {
     send: (b) => req('POST', '/gifts/send', b),
+    purchase: (itemId, b) => req('POST', `/gifts/purchase/${itemId}`, b),
+    purchasePack: (packId, b) => req('POST', `/gifts/purchase-pack/${packId}`, b),
     history: () => req('GET', '/gifts/history'),
     tradePropose: (b) => req('POST', '/gifts/trade/propose', b),
     tradePending: () => req('GET', '/gifts/trade/pending'),
