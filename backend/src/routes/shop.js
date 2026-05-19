@@ -20,7 +20,9 @@ router.get('/shop', async (req, res) => {
   const { rows: userRows } = await pool.query('SELECT gold, level FROM users WHERE id = $1', [req.userId]);
   const { rows: owned } = await pool.query('SELECT item_id FROM user_inventory WHERE user_id = $1', [req.userId]);
   const level = userRows[0]?.level || 1;
-  const items = level >= 10 ? ITEMS : ITEMS.filter(i => !i.legendsOnly);
+  // Hide milestone-reward items (granted automatically) and gate legends to L10+.
+  let items = ITEMS.filter(i => !i.unlockReward);
+  if (level < 10) items = items.filter(i => !i.legendsOnly);
   res.json({
     gold: userRows[0]?.gold || 0,
     level,
@@ -35,6 +37,12 @@ router.get('/shop', async (req, res) => {
 router.post('/shop/buy/:itemId', async (req, res) => {
   const item = itemById(req.params.itemId);
   if (!item) return res.status(404).json({ error: 'Item not found' });
+
+  // Reward-only items can never be purchased — they're awarded for hitting
+  // level milestones (banner_veteran @25, banner_ascendant @50, banner_incarnate @100).
+  if (item.unlockReward) {
+    return res.status(403).json({ error: 'This banner can only be earned by reaching a level milestone.' });
+  }
 
   const { rows } = await pool.query('SELECT gold, level, username FROM users WHERE id = $1', [req.userId]);
   const user = rows[0];

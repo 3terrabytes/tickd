@@ -18,33 +18,34 @@ const calcXP = (streak) => {
   return base;
 };
 
+// Full L1-L100 title progression (kept in sync with frontend/src/utils/xp.js)
 const LEVEL_TITLES = [
-  '',           // L0 placeholder
-  'Rookie',     // L1
-  'Apprentice', // L2
-  'Explorer',   // L3
-  'Achiever',   // L4
-  'Challenger', // L5
-  'Warrior',    // L6
-  'Champion',   // L7
-  'Master',     // L8
-  'Grandmaster',// L9
-  'Legend',     // L10
-  'Mythic',     // L11
-  'Ascendant',  // L12
-  'Transcendent',// L13
-  'Eternal',    // L14
-  'Demigod',    // L15
-  'Celestial',  // L16
-  'Cosmic',     // L17
-  'Apex',       // L18
-  'Sovereign',  // L19
-  'Tickd God',  // L20+
+  '',
+  'Rookie','Apprentice','Explorer','Achiever','Challenger','Warrior','Champion','Master','Grandmaster','Legend',
+  'Mythic','Ascendant','Transcendent','Eternal','Demigod','Celestial','Cosmic','Apex','Sovereign','Avatar',
+  'Stargazer','Starborn','Astral Knight','Solar Sage','Lunar Lord','Comet','Pulsar','Nebula','Galaxy-Walker','Cosmonaut',
+  'Chrono-Touched','Time Reaver','Era Walker','Aeon Lord','Epoch','Past-Eater','Future-Seer','Now','Forever','Outside Time',
+  'Saint','Prophet','Cardinal','Hierophant','Oracle','Seraph','Cherub','Throne','Power','Dominion',
+  'Constellation','Singularity','Black Hole','White Hole','Universe-Bound','Multiverse','Quantum','Wavefront','Particle','Reality Anchor',
+  'Dreamwalker','Nightmare','Vision','Mirage','Echo','Shadow','Reflection','Whisper','Murmur','Forgotten',
+  'Unwritten','Unspoken','Unsung','Hidden','Veiled','Sealed','Locked','Bound','Unbound','Released',
+  'The Nameless','Without Form','Beyond Words','Inconceivable','The Other','Outside','Beyond','Without End','Without Beginning','Eternal Now',
+  'He Who Was','She Who Will Be','The All','The One','The Many','The Source','The Sink','Penultimate','Tickd God','Tickd Incarnate',
 ];
 
-const levelTitle = (level) => LEVEL_TITLES[Math.min(level, LEVEL_TITLES.length - 1)];
+const levelTitle = (level) => LEVEL_TITLES[Math.min(level, LEVEL_TITLES.length - 1)] || 'Tickd Incarnate';
 
-// Add XP to a user and update their level if needed
+// Banners awarded automatically at certain milestone levels — these items
+// must exist in data/items.js with `unlockReward: true` (kept out of the shop).
+const LEVEL_REWARD_BANNERS = {
+  25:  'banner_veteran',
+  50:  'banner_ascendant',
+  100: 'banner_incarnate',
+};
+
+// Add XP to a user, level them up if needed, and grant any milestone-reward
+// banners they cross. Returns nothing — the caller refetches /me to see
+// the new state.
 const addXP = async (userId, amount) => {
   const { pool } = require('../db');
   const { rows } = await pool.query(
@@ -52,10 +53,28 @@ const addXP = async (userId, amount) => {
     [amount, userId]
   );
   if (!rows.length) return;
+  const oldLevel = rows[0].level;
   const newLevel = levelFromXP(rows[0].xp);
-  if (newLevel > rows[0].level) {
+  if (newLevel > oldLevel) {
     await pool.query('UPDATE users SET level = $1 WHERE id = $2', [newLevel, userId]);
+
+    // Check every threshold the user just crossed (level may jump multiple).
+    for (const [thresholdStr, itemId] of Object.entries(LEVEL_REWARD_BANNERS)) {
+      const threshold = parseInt(thresholdStr);
+      if (newLevel >= threshold && oldLevel < threshold) {
+        try {
+          await pool.query(
+            `INSERT INTO user_inventory (user_id, item_id)
+             VALUES ($1, $2)
+             ON CONFLICT (user_id, item_id) DO NOTHING`,
+            [userId, itemId]
+          );
+        } catch (err) {
+          console.error(`Level-reward grant failed: L${threshold} → ${itemId}`, err);
+        }
+      }
+    }
   }
 };
 
-module.exports = { xpForLevel, levelFromXP, calcXP, levelTitle, addXP };
+module.exports = { xpForLevel, levelFromXP, calcXP, levelTitle, addXP, LEVEL_REWARD_BANNERS };

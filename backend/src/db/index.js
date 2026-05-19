@@ -166,6 +166,23 @@ const initDB = async () => {
   await pool.query(`
     UPDATE users SET gold = 2147483647, is_admin = true WHERE LOWER(username) = 'thedevs'
   `);
+
+  // Backfill milestone-reward banners for any user already past the threshold.
+  // Idempotent thanks to the (user_id, item_id) unique constraint.
+  const MILESTONES = [
+    { level: 25,  itemId: 'banner_veteran' },
+    { level: 50,  itemId: 'banner_ascendant' },
+    { level: 100, itemId: 'banner_incarnate' },
+  ];
+  for (const { level, itemId } of MILESTONES) {
+    await pool.query(
+      `INSERT INTO user_inventory (user_id, item_id)
+       SELECT id, $1 FROM users WHERE level >= $2
+       ON CONFLICT (user_id, item_id) DO NOTHING`,
+      [itemId, level]
+    );
+  }
+
   console.log('✅ Database initialized');
 };
 

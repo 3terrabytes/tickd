@@ -163,6 +163,68 @@ const ITEMS = [
   { id: 'pet_lunar',       type: 'companion', name: 'Moon Wolf',         rarity: 'legendary', cost: 1700, magic: 48, emoji: '🐺', desc: 'Howls at the full moon. Yours, always.', theme: 'lunar' },
   { id: 'title_lunar',     type: 'title',     name: '"Eclipse-Touched"', rarity: 'legendary', cost: 1150, magic: 0,  emoji: '🌑', desc: 'The dark sees you.', theme: 'lunar' },
 
+  // ── 40 EXTRA SHOP ITEMS ─────────────────────────────────────────────
+  // Bulk catalog expansion. Spread across all slots + rarities.
+
+  // Weapons (10)
+  { id: 'sword_bone',         type: 'weapon',    name: 'Bone Sword',         rarity: 'common',    cost: 90,   magic: 3,  emoji: '🦴', desc: 'Carved from a fallen beast. Surprisingly sharp.' },
+  { id: 'sword_dawn',         type: 'weapon',    name: 'Dawn Blade',         rarity: 'epic',      cost: 540,  magic: 24, emoji: '🌅', desc: 'Brightens the darkest corridor.' },
+  { id: 'sword_frost_cleaver',type: 'weapon',    name: 'Frost Cleaver',      rarity: 'rare',      cost: 280,  magic: 13, emoji: '🧊', desc: 'Each swing leaves a chill in the air.' },
+  { id: 'staff_crystal',      type: 'weapon',    name: 'Crystal Wand',       rarity: 'rare',      cost: 270,  magic: 13, emoji: '🔮', desc: 'Refracts magic into a hundred colours.' },
+  { id: 'staff_mossy',        type: 'weapon',    name: 'Mossy Branch',       rarity: 'common',    cost: 65,   magic: 3,  emoji: '🌿', desc: 'Older than the forest. Older than fire.' },
+  { id: 'bow_moonshard',      type: 'weapon',    name: 'Moonshard Bow',      rarity: 'epic',      cost: 560,  magic: 25, emoji: '🌙', desc: 'Strings sing in the dark.' },
+  { id: 'dagger_twilight',    type: 'weapon',    name: 'Twilight Dagger',    rarity: 'epic',      cost: 510,  magic: 22, emoji: '🌒', desc: 'Drinks the last light of day.' },
+  { id: 'lance_storm',        type: 'weapon',    name: 'Storm Spear',        rarity: 'rare',      cost: 290,  magic: 14, emoji: '🌩️', desc: 'Crackles when held high.' },
+  { id: 'hammer_oak',         type: 'weapon',    name: 'Oakheart Maul',      rarity: 'common',    cost: 110,  magic: 4,  emoji: '🪵', desc: 'Heavy. Honest. Hammery.' },
+  { id: 'scythe_harvest',     type: 'weapon',    name: 'Harvest Scythe',     rarity: 'rare',      cost: 260,  magic: 12, emoji: '🌾', desc: 'For reaping fields. And foes.' },
+
+  // Armor (8)
+  { id: 'armor_mossy',        type: 'armor',     name: 'Mossy Cloak',        rarity: 'common',    cost: 65,   magic: 2,  emoji: '🍂', desc: 'Smells faintly of damp forest floor.' },
+  { id: 'armor_crystal',      type: 'armor',     name: 'Crystal Mail',       rarity: 'epic',      cost: 590,  magic: 27, emoji: '💠', desc: 'Refracts incoming blows into rainbows.' },
+  { id: 'armor_bone',         type: 'armor',     name: 'Bone Plate',         rarity: 'rare',      cost: 270,  magic: 11, emoji: '🦴', desc: 'Wearing it feels deeply impolite.' },
+  { id: 'armor_silk',         type: 'armor',     name: 'Spider Silk Robes',  rarity: 'rare',      cost: 285,  magic: 14, emoji: '🕸️', desc: 'Light, strong, slightly judgmental.' },
+  { id: 'armor_stardust',     type: 'armor',     name: 'Stardust Cloak',     rarity: 'epic',      cost: 600,  magic: 28, emoji: '✨', desc: 'Twinkles when you move.' },
+  { id: 'armor_phantom',      type: 'armor',     name: 'Phantom Veil',       rarity: 'epic',      cost: 555,  magic: 24, emoji: '👻', desc: 'You\'re half there.' },
+  { id: 'armor_lava',         type: 'armor',     name: 'Lava Plate',         rarity: 'legendary', cost: 1300, magic: 45, emoji: '🌋', desc: 'Glows like a banked fire.' },
+  { id: 'armor_paper',        type: 'armor',     name: 'Paper Armour',       rarity: 'common',    cost: 30,   magic: 0,  emoji: '📄', desc: 'A poor life choice. But cheap!' },
+
+  // Banners (8)
+  { id: 'banner_sunset',      type: 'banner',    name: 'Sunset Sky',         rarity: 'rare',      cost: 210,  magic: 0,  color: 'linear-gradient(90deg,#7c2d12,#f97316,#fbbf24,#fde68a)', desc: 'The hour where the world holds its breath.' },
+  { id: 'banner_sakura_grove',type: 'banner',    name: 'Cherry Grove',       rarity: 'rare',      cost: 195,  magic: 0,  color: 'linear-gradient(90deg,#831843,#f472b6,#fce7f3,#f9a8d4)', desc: 'Petals on the wind.' },
+  { id: 'banner_deep_ocean',  type: 'banner',    name: 'Deep Ocean',         rarity: 'rare',      cost: 200,  magic: 0,  color: 'linear-gradient(90deg,#020617,#0c4a6e,#0ea5e9)', desc: 'Where light goes to drown.' },
+  { id: 'banner_volcanic',    type: 'banner',    name: 'Volcanic',           rarity: 'epic',      cost: 470,  magic: 0,  color: 'linear-gradient(90deg,#000000,#7c2d12,#ef4444,#fde047)', desc: 'A glow visible from orbit.' },
+  { id: 'banner_glacier',     type: 'banner',    name: 'Glacier',            rarity: 'rare',      cost: 200,  magic: 0,  color: 'linear-gradient(90deg,#082f49,#0ea5e9,#bae6fd,#f0f9ff)', desc: 'Endless white.' },
+  { id: 'banner_forest_mist', type: 'banner',    name: 'Forest Mist',        rarity: 'common',    cost: 55,   magic: 0,  color: 'linear-gradient(90deg,#0f172a,#1e293b,#475569,#a8a29e)', desc: 'Quiet. Damp. Watching.' },
+  { id: 'banner_storm_sea',   type: 'banner',    name: 'Stormy Sea',         rarity: 'epic',      cost: 460,  magic: 0,  color: 'linear-gradient(90deg,#0c1445,#1e3a8a,#475569,#a3a3a3)', desc: 'Brace the prow.' },
+  { id: 'banner_twilight',    type: 'banner',    name: 'Twilight Banner',    rarity: 'epic',      cost: 480,  magic: 0,  color: 'linear-gradient(90deg,#1e1b4b,#7c3aed,#f472b6,#fbbf24)', desc: 'The hour between dog and wolf.' },
+
+  // Badges (8)
+  { id: 'badge_crab',         type: 'badge',     name: 'Crab Badge',         rarity: 'common',    cost: 40,   magic: 0,  emoji: '🦀', desc: 'Sideways or nothing.' },
+  { id: 'badge_fish',         type: 'badge',     name: 'Fish Badge',         rarity: 'common',    cost: 35,   magic: 0,  emoji: '🐟', desc: 'A fine companion. Wet.' },
+  { id: 'badge_tree',         type: 'badge',     name: 'Tree Badge',         rarity: 'common',    cost: 40,   magic: 0,  emoji: '🌳', desc: 'Plant yourself in the leaderboard.' },
+  { id: 'badge_mountain',     type: 'badge',     name: 'Mountain Badge',     rarity: 'rare',      cost: 160,  magic: 0,  emoji: '⛰️', desc: 'Climb. Or be climbed.' },
+  { id: 'badge_cloud',        type: 'badge',     name: 'Cloud Badge',        rarity: 'common',    cost: 35,   magic: 0,  emoji: '☁️', desc: 'Head in the air.' },
+  { id: 'badge_wave',         type: 'badge',     name: 'Wave Badge',         rarity: 'rare',      cost: 170,  magic: 0,  emoji: '🌊', desc: 'Roll on. Roll on.' },
+  { id: 'badge_rune',         type: 'badge',     name: 'Rune Badge',         rarity: 'epic',      cost: 410,  magic: 0,  emoji: 'ᚱ', desc: 'It hums when no one looks.' },
+  { id: 'badge_eye',          type: 'badge',     name: 'Watching Eye',       rarity: 'epic',      cost: 430,  magic: 0,  emoji: '👁', desc: 'You are seen.' },
+
+  // Companions (4)
+  { id: 'pet_penguin',        type: 'companion', name: 'Tuxedo Penguin',     rarity: 'rare',      cost: 360,  magic: 16, emoji: '🐧', desc: 'Dapper. Determined. Cold.' },
+  { id: 'pet_otter',          type: 'companion', name: 'Pocket Otter',       rarity: 'rare',      cost: 340,  magic: 14, emoji: '🦦', desc: 'Holds your hand while you sleep.' },
+  { id: 'pet_raccoon',        type: 'companion', name: 'Bandit Raccoon',     rarity: 'rare',      cost: 380,  magic: 16, emoji: '🦝', desc: 'May or may not steal your gold.' },
+  { id: 'pet_hedgehog',       type: 'companion', name: 'Spike Hedgehog',     rarity: 'common',    cost: 140,  magic: 6,  emoji: '🦔', desc: 'Pointy on the outside. Soft inside.' },
+
+  // Titles (2)
+  { id: 'title_punctual',     type: 'title',     name: '"The Punctual"',     rarity: 'rare',      cost: 240,  magic: 0,  emoji: '⏰', desc: 'Never a day missed.' },
+  { id: 'title_determined',   type: 'title',     name: '"The Determined"',   rarity: 'epic',      cost: 540,  magic: 0,  emoji: '💪', desc: 'Will outlast the universe.' },
+
+  // ── LEVEL-MILESTONE REWARD BANNERS (not for sale; granted automatically) ──
+  // These appear in user_inventory the moment the player crosses the level
+  // threshold — see backend/src/utils/xp.js LEVEL_REWARD_BANNERS.
+  { id: 'banner_veteran',     type: 'banner',    name: "Veteran's Banner",   rarity: 'epic',      cost: 0,    magic: 0,  color: 'linear-gradient(90deg,#78350f,#f59e0b,#fde68a,#fbbf24)', desc: 'Awarded at Level 25. Earned, not bought.',           unlockReward: true, unlockLevel: 25 },
+  { id: 'banner_ascendant',   type: 'banner',    name: 'Ascendant Banner',   rarity: 'legendary', cost: 0,    magic: 0,  color: 'linear-gradient(90deg,#3b0764,#7c3aed,#a78bfa,#ec4899,#fbbf24)', desc: 'Awarded at Level 50. The mark of the ascended.',   unlockReward: true, unlockLevel: 50 },
+  { id: 'banner_incarnate',   type: 'banner',    name: 'Tickd Incarnate',    rarity: 'mythic',    cost: 0,    magic: 0,  color: 'linear-gradient(90deg,#000000,#ef4444,#f59e0b,#fde047,#10b981,#06b6d4,#7c3aed,#f0abfc,#000000)', desc: 'Awarded at Level 100. The end of the climb.',     unlockReward: true, unlockLevel: 100 },
+
   // EXTRA CONSUMABLES
   { id: 'potion_minor_xp', type: 'consumable', name: 'Minor XP Potion',  rarity: 'common',    cost: 80,  magic: 0, emoji: '🧪', desc: 'A small swig. Grants a little XP.' },
   { id: 'potion_gold',     type: 'consumable', name: 'Gold Pouch',       rarity: 'rare',      cost: 350, magic: 0, emoji: '💰', desc: 'A modest sack of coins. Pocket it.' },
