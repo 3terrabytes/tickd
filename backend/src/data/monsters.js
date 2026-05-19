@@ -10,30 +10,32 @@
 
 const MONSTERS = [
   // ── tier 1: warmup ───────────────────────────────────────────────────
-  { id: 'slime',       name: 'Green Slime',     tier: 1, hp: 30,  power: 6,  xp: 20,  gold: 5,  sprite: '🟢', element: 'poison',   taunt: 'It jiggles menacingly.' },
-  { id: 'bat',         name: 'Cave Bat',        tier: 1, hp: 26,  power: 8,  xp: 22,  gold: 6,  sprite: '🦇', element: 'shadow',   taunt: 'Screeches in the dark.' },
-  { id: 'rat',         name: 'Plague Rat',      tier: 1, hp: 22,  power: 7,  xp: 18,  gold: 4,  sprite: '🐀', element: 'poison',   taunt: 'You smell it before you see it.' },
+  // XP cut roughly 40%, gold ~2-3x. Habits stay the main XP grind; the dungeon
+  // is now a gold faucet by design.
+  { id: 'slime',       name: 'Green Slime',     tier: 1, hp: 30,  power: 6,  xp: 12, gold: 14, sprite: '🟢', element: 'poison',   taunt: 'It jiggles menacingly.' },
+  { id: 'bat',         name: 'Cave Bat',        tier: 1, hp: 26,  power: 8,  xp: 13, gold: 16, sprite: '🦇', element: 'shadow',   taunt: 'Screeches in the dark.' },
+  { id: 'rat',         name: 'Plague Rat',      tier: 1, hp: 22,  power: 7,  xp: 11, gold: 12, sprite: '🐀', element: 'poison',   taunt: 'You smell it before you see it.' },
 
   // ── tier 2: standard ─────────────────────────────────────────────────
-  { id: 'goblin',      name: 'Goblin Scout',    tier: 2, hp: 45,  power: 10, xp: 35,  gold: 10, sprite: '👺', element: 'physical', taunt: 'It grins, showing too many teeth.' },
-  { id: 'skeleton',    name: 'Skeleton',        tier: 2, hp: 50,  power: 11, xp: 40,  gold: 11, sprite: '💀', element: 'shadow',   taunt: 'The bones rattle into formation.' },
-  { id: 'spider',      name: 'Giant Spider',    tier: 2, hp: 48,  power: 12, xp: 42,  gold: 12, sprite: '🕷️', element: 'poison',   taunt: 'Eight eyes lock onto you.' },
-  { id: 'wolf',        name: 'Dire Wolf',       tier: 2, hp: 55,  power: 13, xp: 45,  gold: 13, sprite: '🐺', element: 'physical', taunt: 'A guttural growl fills the chamber.' },
+  { id: 'goblin',      name: 'Goblin Scout',    tier: 2, hp: 45,  power: 10, xp: 22, gold: 28, sprite: '👺', element: 'physical', taunt: 'It grins, showing too many teeth.' },
+  { id: 'skeleton',    name: 'Skeleton',        tier: 2, hp: 50,  power: 11, xp: 24, gold: 30, sprite: '💀', element: 'shadow',   taunt: 'The bones rattle into formation.' },
+  { id: 'spider',      name: 'Giant Spider',    tier: 2, hp: 48,  power: 12, xp: 25, gold: 32, sprite: '🕷️', element: 'poison',   taunt: 'Eight eyes lock onto you.' },
+  { id: 'wolf',        name: 'Dire Wolf',       tier: 2, hp: 55,  power: 13, xp: 27, gold: 34, sprite: '🐺', element: 'physical', taunt: 'A guttural growl fills the chamber.' },
 
   // ── tier 3: tough ────────────────────────────────────────────────────
-  { id: 'orc',         name: 'Orc Brute',       tier: 3, hp: 80,  power: 15, xp: 65,  gold: 20, sprite: '👹', element: 'physical', taunt: '"PUNY MORTAL."' },
-  { id: 'wraith',      name: 'Vengeful Wraith', tier: 3, hp: 70,  power: 17, xp: 70,  gold: 22, sprite: '👻', element: 'shadow',   taunt: 'The temperature drops twenty degrees.' },
-  { id: 'mimic',       name: 'Mimic Chest',     tier: 3, hp: 90,  power: 14, xp: 72,  gold: 28, sprite: '🎁', element: 'physical', taunt: 'You should have known better.' },
+  { id: 'orc',         name: 'Orc Brute',       tier: 3, hp: 80,  power: 15, xp: 40, gold: 55, sprite: '👹', element: 'physical', taunt: '"PUNY MORTAL."' },
+  { id: 'wraith',      name: 'Vengeful Wraith', tier: 3, hp: 70,  power: 17, xp: 42, gold: 58, sprite: '👻', element: 'shadow',   taunt: 'The temperature drops twenty degrees.' },
+  { id: 'mimic',       name: 'Mimic Chest',     tier: 3, hp: 90,  power: 14, xp: 44, gold: 72, sprite: '🎁', element: 'physical', taunt: 'You should have known better.' },
 
   // ── tier 4: elite ────────────────────────────────────────────────────
-  { id: 'minotaur',    name: 'Minotaur',        tier: 4, hp: 120, power: 20, xp: 110, gold: 38, sprite: '🐂', element: 'physical', taunt: 'It paws the ground, then charges.' },
-  { id: 'lich',        name: 'Frost Lich',      tier: 4, hp: 110, power: 22, xp: 120, gold: 40, sprite: '🧙', element: 'ice',      taunt: '"Your soul will warm my tomb."' },
-  { id: 'phoenix',     name: 'Ember Phoenix',   tier: 4, hp: 115, power: 21, xp: 115, gold: 39, sprite: '🦅', element: 'fire',     taunt: 'It bursts into flame.' },
+  { id: 'minotaur',    name: 'Minotaur',        tier: 4, hp: 120, power: 20, xp: 66, gold: 100, sprite: '🐂', element: 'physical', taunt: 'It paws the ground, then charges.' },
+  { id: 'lich',        name: 'Frost Lich',      tier: 4, hp: 110, power: 22, xp: 72, gold: 105, sprite: '🧙', element: 'ice',      taunt: '"Your soul will warm my tomb."' },
+  { id: 'phoenix',     name: 'Ember Phoenix',   tier: 4, hp: 115, power: 21, xp: 69, gold: 102, sprite: '🦅', element: 'fire',     taunt: 'It bursts into flame.' },
 
   // ── tier 5: bosses ───────────────────────────────────────────────────
-  { id: 'dragon',      name: 'Ancient Dragon',  tier: 5, hp: 220, power: 28, xp: 260, gold: 90, sprite: '🐉', element: 'fire',      taunt: 'The dungeon shakes as it roars.' },
-  { id: 'demon_lord',  name: 'Demon Lord',      tier: 5, hp: 240, power: 30, xp: 280, gold: 100, sprite: '😈', element: 'shadow',    taunt: '"At last. A challenger."' },
-  { id: 'void_knight', name: 'Void Knight',     tier: 5, hp: 250, power: 26, xp: 300, gold: 110, sprite: '🌌', element: 'arcane',    taunt: 'A figure of impossible darkness draws its blade.' },
+  { id: 'dragon',      name: 'Ancient Dragon',  tier: 5, hp: 220, power: 28, xp: 155, gold: 240, sprite: '🐉', element: 'fire',      taunt: 'The dungeon shakes as it roars.' },
+  { id: 'demon_lord',  name: 'Demon Lord',      tier: 5, hp: 240, power: 30, xp: 165, gold: 260, sprite: '😈', element: 'shadow',    taunt: '"At last. A challenger."' },
+  { id: 'void_knight', name: 'Void Knight',     tier: 5, hp: 250, power: 26, xp: 180, gold: 280, sprite: '🌌', element: 'arcane',    taunt: 'A figure of impossible darkness draws its blade.' },
 ];
 
 const monsterById = (id) => MONSTERS.find(m => m.id === id);

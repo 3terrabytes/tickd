@@ -148,10 +148,8 @@ export default function PixelCharacter({
         <rect x="22" y="52" width="6" height="4" fill={skin} />
         <rect x="52" y="52" width="6" height="4" fill={skin} />
 
-        {/* ── WEAPON in right hand ─────────────────────────────────────── */}
-        {weapon ? (
-          <text x="55" y="58" fontSize="14" textAnchor="middle">{weapon.emoji}</text>
-        ) : (
+        {/* ── WEAPON in right hand — pixel-art sprite per class ───────── */}
+        {weapon ? renderWeapon(weapon) : (
           <>
             {/* Default plain sword */}
             <rect x="55" y="30" width="3" height="26" fill="#c0c0c0" />
@@ -397,6 +395,101 @@ function parseGradientStops(str) {
     return hexes && hexes.length === 1 ? [hexes[0], hexes[0]] : null;
   }
   return [hexes[0], hexes[1]];
+}
+
+// ── Pixel-art weapon sprites ─────────────────────────────────────────────
+// Drawn in the character's right hand, anchored around (55, 50). Each class
+// gets its own silhouette; rarity drives the colour palette.
+function renderWeapon(weapon) {
+  // Rarity → palette. Blade colour, guard colour, accent colour.
+  const RARITY_PALETTE = {
+    common:    { blade: '#cbd5e1', guard: '#8b6914', accent: '#f0d060', glow: 'none' },
+    rare:      { blade: '#93c5fd', guard: '#1e3a8a', accent: '#60a5fa', glow: 'drop-shadow(0 0 1px #3b82f6)' },
+    epic:      { blade: '#c4b5fd', guard: '#4c1d95', accent: '#a78bfa', glow: 'drop-shadow(0 0 1.5px #8b5cf6)' },
+    legendary: { blade: '#fde68a', guard: '#78350f', accent: '#fbbf24', glow: 'drop-shadow(0 0 2px #f59e0b)' },
+    mythic:    { blade: '#f5d0fe', guard: '#86198f', accent: '#f0abfc', glow: 'drop-shadow(0 0 2.5px #d946ef)' },
+  };
+  const p = RARITY_PALETTE[weapon.rarity] || RARITY_PALETTE.common;
+  const cls = weapon.weaponClass;
+
+  // Group wrapper applies glow filter on rarer weapons.
+  const wrap = (children) => (
+    <g style={{ filter: p.glow !== 'none' ? p.glow : undefined }}>{children}</g>
+  );
+
+  switch (cls) {
+    case 'sword': return wrap(<>
+      {/* Crosshair vertical blade, crossguard, hilt, pommel */}
+      <rect x="56" y="26" width="3" height="22" fill={p.blade} />
+      <rect x="55" y="26" width="1" height="22" fill="#fff" opacity="0.35" />
+      <rect x="52" y="44" width="11" height="2" fill={p.guard} />
+      <rect x="55" y="46" width="5" height="6" fill="#3a2718" />
+      <rect x="55" y="52" width="5" height="2" fill={p.accent} />
+    </>);
+    case 'staff': return wrap(<>
+      {/* Pole with glowing orb */}
+      <rect x="57" y="28" width="2" height="28" fill={p.guard} />
+      <rect x="57" y="28" width="1" height="28" fill={p.accent} opacity="0.6" />
+      <circle cx="58" cy="26" r="4" fill={p.accent} />
+      <circle cx="58" cy="26" r="2" fill="#fff" opacity="0.7" />
+    </>);
+    case 'wand': return wrap(<>
+      {/* Short pole with a star tip */}
+      <rect x="57" y="38" width="2" height="18" fill="#1f1f1f" />
+      <rect x="55" y="34" width="6" height="4" fill={p.accent} />
+      <rect x="56" y="32" width="4" height="2" fill={p.accent} />
+      <rect x="57" y="35" width="2" height="2" fill="#fff" />
+    </>);
+    case 'bow': return wrap(<>
+      {/* Bow curve as two stacked arcs; string as line; nocked arrow */}
+      <path d="M55,26 Q49,38 55,50" stroke={p.guard} strokeWidth="2" fill="none" />
+      <path d="M55,26 Q53,38 55,50" stroke={p.accent} strokeWidth="1" fill="none" opacity="0.7" />
+      <line x1="55" y1="26" x2="55" y2="50" stroke="#fff" strokeWidth="0.5" opacity="0.5" />
+      {/* Arrow */}
+      <rect x="48" y="37" width="10" height="1" fill={p.blade} />
+      <path d="M48,38 L45,37 L48,36 Z" fill={p.accent} />
+    </>);
+    case 'axe': return wrap(<>
+      {/* Vertical handle + chunky axe head */}
+      <rect x="57" y="30" width="2" height="26" fill={p.guard} />
+      <path d="M51,30 L62,30 L62,40 L57,42 L51,40 Z" fill={p.blade} />
+      <path d="M51,30 L62,30 L62,32 L51,32 Z" fill="#fff" opacity="0.4" />
+      <rect x="56" y="36" width="3" height="2" fill={p.accent} />
+    </>);
+    case 'hammer': return wrap(<>
+      {/* Handle + brick-like hammer head */}
+      <rect x="57" y="34" width="2" height="22" fill={p.guard} />
+      <rect x="50" y="28" width="14" height="8" fill={p.blade} stroke="#000" strokeWidth="0.5" />
+      <rect x="50" y="28" width="14" height="2" fill="#fff" opacity="0.35" />
+      <rect x="53" y="31" width="2" height="2" fill={p.accent} />
+      <rect x="59" y="31" width="2" height="2" fill={p.accent} />
+    </>);
+    case 'dagger': return wrap(<>
+      {/* Short blade with crossguard */}
+      <rect x="56" y="38" width="2" height="14" fill={p.blade} />
+      <rect x="55" y="38" width="1" height="14" fill="#fff" opacity="0.4" />
+      <rect x="53" y="50" width="8" height="2" fill={p.guard} />
+      <rect x="56" y="52" width="2" height="4" fill="#3a2718" />
+      <rect x="56" y="56" width="2" height="1" fill={p.accent} />
+    </>);
+    case 'lance': return wrap(<>
+      {/* Long pole with spearhead at top */}
+      <rect x="57" y="22" width="2" height="34" fill={p.guard} />
+      <path d="M55,22 L61,22 L58,14 Z" fill={p.blade} />
+      <path d="M56,22 L60,22 L58,16 Z" fill="#fff" opacity="0.5" />
+      <rect x="55" y="28" width="6" height="2" fill={p.accent} />
+    </>);
+    case 'scythe': return wrap(<>
+      {/* Curved blade off the top of a long handle */}
+      <rect x="57" y="28" width="2" height="28" fill={p.guard} />
+      <path d="M59,28 Q70,26 64,18 Q60,20 58,26 Z" fill={p.blade} />
+      <path d="M59,28 Q68,26 64,20" stroke="#fff" strokeWidth="0.5" opacity="0.5" fill="none" />
+    </>);
+    default: return wrap(<>
+      <rect x="55" y="30" width="3" height="22" fill={p.blade} />
+      <rect x="53" y="44" width="7" height="2" fill={p.guard} />
+    </>);
+  }
 }
 
 // ── Pixel-art pet sprites ────────────────────────────────────────────────

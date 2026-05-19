@@ -205,9 +205,8 @@ router.post('/treasure', async (req, res) => {
   try {
     const { tier } = req.body;
     const t = Math.max(1, Math.min(5, parseInt(tier) || 1));
-    // Reduced from the old 40+30t formula — dungeon gold should accent the
-    // economy, not replace habit gold as the main income source.
-    const gold = 15 + t * 10 + Math.floor(Math.random() * 8);
+    // Dungeon is a gold faucet by design — habits are still the XP grind.
+    const gold = 40 + t * 25 + Math.floor(Math.random() * 20);
     await pool.query(
       'UPDATE users SET gold = gold + $1, lifetime_gold = COALESCE(lifetime_gold, 0) + $1 WHERE id = $2',
       [gold, req.userId]

@@ -711,18 +711,23 @@ export default function DungeonPage() {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12, paddingBottom: 32 }}>
         <RunHeader />
 
-        <div className={`card ${stageShake ? 'battle-shake' : ''} ${isBoss ? 'boss-room' : ''}`} style={{
-          padding: 0, overflow: 'hidden', position: 'relative',
-          background: isBoss
-            ? 'radial-gradient(circle at 50% 30%, rgba(127,29,29,0.4) 0%, #0a0a0f 70%)'
-            : isElite
-            ? 'radial-gradient(ellipse at 50% 30%, #3a1f0f 0%, #0a0a14 75%)'
-            : 'radial-gradient(ellipse at 50% 30%, #1f1f3a 0%, #0a0a14 75%)',
-          border: `1px solid ${isBoss ? '#7f1d1d' : isElite ? '#7c2d12' : '#2a2a3a'}`,
-          minHeight: 320,
+        <div className={`dungeon-stage ${stageShake ? 'battle-shake' : ''} ${isBoss ? 'boss-room' : ''}`} style={{
+          padding: 0, position: 'relative', minHeight: 320,
         }}>
-          <span className="dungeon-torch" style={{ position: 'absolute', top: 8, left: 8, fontSize: 22 }}>🔥</span>
-          <span className="dungeon-torch right" style={{ position: 'absolute', top: 8, right: 8, fontSize: 22 }}>🔥</span>
+          {/* Stone floor at the bottom of the stage. */}
+          <div className="dungeon-floor" />
+          {/* Drifting dust motes for ambience. */}
+          {[0, 1, 2, 3, 4].map(i => (
+            <span key={i} className="dust-mote" style={{
+              left: `${10 + i * 18}%`,
+              bottom: 30 + (i % 3) * 20,
+              animationDelay: `${i * 1.1}s`,
+              animationDuration: `${5 + (i % 3)}s`,
+            }} />
+          ))}
+
+          <span className="dungeon-torch" style={{ position: 'absolute', top: 8, left: 8, fontSize: 22, zIndex: 2 }}>🔥</span>
+          <span className="dungeon-torch right" style={{ position: 'absolute', top: 8, right: 8, fontSize: 22, zIndex: 2 }}>🔥</span>
 
           <div style={{ padding: 16, position: 'relative', minHeight: 320 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 14, gap: 12 }}>
@@ -766,11 +771,11 @@ export default function DungeonPage() {
               </div>
             </div>
 
-            <div style={{ position: 'relative', height: 200, display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', padding: '0 30px' }}>
-              <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 20,
-                background: 'radial-gradient(ellipse at 50% 100%, rgba(0,0,0,0.6) 0%, transparent 70%)' }} />
+            <div style={{ position: 'relative', height: 200, display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', padding: '0 30px', zIndex: 2 }}>
 
               <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, position: 'relative' }}>
+                {/* Soft glow under player feet for grounding */}
+                <div className="combat-light player" />
                 <div className={`${playerAnim || 'battle-idle'}`} style={{ position: 'relative' }}>
                   <PixelCharacter appearance={user || {}} equipped={inventory.equipped} size={130} />
                   {damages.filter(d => d.target === 'player').map(d => (
@@ -801,6 +806,10 @@ export default function DungeonPage() {
                 )}
               </div>
 
+              <div style={{ position: 'relative' }}>
+                {/* Floor glow under monster, ring aura for bosses */}
+                <div className={`combat-light ${isBoss ? 'boss' : 'monster'}`} />
+                {isBoss && <div className="boss-aura" />}
               <div className={`${monsterAnim || 'battle-idle'}`} style={{
                 position: 'relative',
                 fontSize: isBoss ? 140 : isElite ? 120 : 110, lineHeight: 1,
@@ -820,6 +829,14 @@ export default function DungeonPage() {
                     +{lootDrop.xp} XP · +{lootDrop.gold} 💰
                   </div>
                 )}
+                {/* Hit-splash bursts and slash trails on each damage event. */}
+                {damages.filter(d => d.target === 'monster').map(d => (
+                  <span key={`splash-${d.id}`} className={`hit-splash ${d.crit ? 'crit' : ''}`} />
+                ))}
+                {damages.filter(d => d.target === 'monster' && !d.crit && d.value > 0).slice(-1).map(d => (
+                  <span key={`slash-${d.id}`} className="slash-trail" />
+                ))}
+              </div>
               </div>
 
               {projectile && (
