@@ -240,6 +240,24 @@ export default function FriendsPage() {
     setTab('gift');
   };
 
+  // Duel ‚Äî async PvP. Server simulates a fight, returns the result, we display
+  // a quick summary modal with XP awarded.
+  const [duelTarget, setDuelTarget] = useState(null);
+  const [duelResult, setDuelResult] = useState(null);
+  const [duelBusy, setDuelBusy] = useState(false);
+  const openDuel = (friend) => { setDuelTarget(friend); setDuelResult(null); };
+  const runDuel = async () => {
+    if (!duelTarget || duelBusy) return;
+    setDuelBusy(true);
+    try {
+      const res = await api.duels.challenge(duelTarget.id);
+      setDuelResult(res);
+    } catch (err) {
+      setDuelResult({ error: err.message });
+    }
+    setDuelBusy(false);
+  };
+
   const sendTrade = async () => {
     if (!myOfferItem || !wantItem || !tradeFriend) return;
     try {
@@ -301,6 +319,11 @@ export default function FriendsPage() {
 
       {selectedFriend && (
         <FriendProfileCard friend={selectedFriend} onClose={() => setSelectedFriend(null)} />
+      )}
+
+      {duelTarget && (
+        <DuelModal target={duelTarget} result={duelResult} busy={duelBusy}
+          onRun={runDuel} onClose={() => { setDuelTarget(null); setDuelResult(null); }} />
       )}
 
       {/* Tab bar */}
@@ -385,8 +408,9 @@ export default function FriendsPage() {
                 </div>
               </div>
               <div style={{ display: 'flex', gap: 6 }} onClick={e => e.stopPropagation()}>
-                <button className="btn btn-ghost" style={{ padding: '6px 10px', fontSize: 11 }} onClick={() => openGift(f)}>üéÅ</button>
-                <button className="btn btn-ghost" style={{ padding: '6px 10px', fontSize: 11 }} onClick={() => openTrade(f)}>‚öîÔ∏è</button>
+                <button className="btn btn-ghost" style={{ padding: '6px 10px', fontSize: 11 }} title="Send a gift" onClick={() => openGift(f)}>üéÅ</button>
+                <button className="btn btn-ghost" style={{ padding: '6px 10px', fontSize: 11 }} title="Propose a trade" onClick={() => openTrade(f)}>üîÑ</button>
+                <button className="btn btn-ghost" style={{ padding: '6px 10px', fontSize: 11, color: '#fca5a5' }} title="Duel for XP" onClick={() => openDuel(f)}>üó°Ô∏è</button>
                 <button className="btn btn-ghost" style={{ padding: '6px 10px', fontSize: 11, color: 'var(--red)' }} onClick={() => remove(f.id)}>√ó</button>
               </div>
             </div>
@@ -785,3 +809,93 @@ const S = {
   },
   empty: { textAlign: 'center', padding: 32 },
 };
+
+
+// Duel result modal ó shows the simulated PvP outcome with XP gained.
+function DuelModal({ target, result, busy, onRun, onClose }) {
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 300, padding: 20,
+    }}>
+      <div className="card" style={{ maxWidth: 440, width: '100%', padding: 22 }}>
+        <div style={{ textAlign: 'center', marginBottom: 12 }}>
+          <div style={{ fontSize: 36, marginBottom: 4 }}>???</div>
+          <h3 style={{ fontFamily: 'Cinzel,serif', fontSize: 20 }}>
+            Duel {target.username}
+          </h3>
+          <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Lv {target.level} ∑ XP only (no gold)</div>
+        </div>
+
+        {!result && (
+          <>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 14, textAlign: 'center' }}>
+              Both decks fight automatically. Winner gets <strong style={{ color: '#a78bfa' }}>30 + opponent_level ◊ 5</strong> XP.
+              Loser gets <strong>5</strong>. 6-hour cooldown per pair.
+            </div>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
+              <button className="btn btn-ghost" onClick={onClose} style={{ padding: '8px 16px' }}>Cancel</button>
+              <button className="btn btn-primary" onClick={onRun} disabled={busy}
+                style={{ padding: '8px 22px', background: '#7f1d1d', borderColor: '#ef4444' }}>
+                {busy ? 'FightingÖ' : 'Begin Duel'}
+              </button>
+            </div>
+          </>
+        )}
+
+        {result?.error && (
+          <>
+            <div style={{ color: '#fca5a5', padding: 12, background: 'rgba(239,68,68,0.12)', borderRadius: 8, marginBottom: 12 }}>
+              {result.error}
+            </div>
+            <button className="btn btn-ghost" onClick={onClose} style={{ width: '100%', padding: '8px' }}>Close</button>
+          </>
+        )}
+
+        {result && !result.error && (
+          <>
+            <div style={{
+              padding: 14, borderRadius: 10, marginBottom: 12, textAlign: 'center',
+              background: result.challengerWon ? 'rgba(16,185,129,0.12)' : 'rgba(127,29,29,0.18)',
+              border: `1px solid ${result.challengerWon ? '#10b98166' : '#ef444466'}`,
+            }}>
+              <div style={{ fontFamily: 'Cinzel,serif', fontSize: 22, marginBottom: 6,
+                color: result.challengerWon ? '#6ee7b7' : '#fca5a5' }}>
+                {result.challengerWon ? 'VICTORY' : 'DEFEAT'}
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-around', fontSize: 12 }}>
+                <div>
+                  <div style={{ fontWeight: 700 }}>{result.challenger.username}</div>
+                  <div style={{ color: 'var(--text-muted)' }}>{result.challenger.finalHp} / {result.challenger.maxHp} HP</div>
+                </div>
+                <div style={{ alignSelf: 'center', fontSize: 18 }}>vs</div>
+                <div>
+                  <div style={{ fontWeight: 700 }}>{result.opponent.username}</div>
+                  <div style={{ color: 'var(--text-muted)' }}>{result.opponent.finalHp} / {result.opponent.maxHp} HP</div>
+                </div>
+              </div>
+              <div style={{ marginTop: 10, fontSize: 14, color: '#a78bfa', fontWeight: 700 }}>
+                +{result.challengerXp} XP
+              </div>
+            </div>
+
+            <details style={{ marginBottom: 12 }}>
+              <summary style={{ fontSize: 12, color: 'var(--text-muted)', cursor: 'pointer' }}>
+                Round log ({result.log.length})
+              </summary>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', maxHeight: 160, overflowY: 'auto', marginTop: 6 }}>
+                {result.log.map((r, i) => (
+                  <div key={i} style={{ padding: '2px 0' }}>
+                    R{r.round}: {result.challenger.username} {r.a.card} ({r.a.dealt}) ∑ {result.opponent.username} {r.b.card} ({r.b.dealt})
+                  </div>
+                ))}
+              </div>
+            </details>
+
+            <button className="btn btn-primary" onClick={onClose} style={{ width: '100%', padding: '10px' }}>Close</button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}

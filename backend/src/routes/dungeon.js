@@ -2,7 +2,11 @@ const express = require('express');
 const { pool } = require('../db');
 const auth = require('../middleware/auth');
 const { addXP } = require('../utils/xp');
-const { ATTACKS, attackById, attacksForClass, DEFAULT_LOADOUT, defaultLoadoutFor } = require('../data/attacks');
+const { ATTACKS, attackById, attacksForClass, DEFAULT_LOADOUT, defaultLoadoutFor,
+        starterDeck, rewardPool, pickRewardCards } = require('../data/attacks');
+const { BIOMES, biomeById } = require('../data/biomes');
+const { RELICS, relicById, pickRelic } = require('../data/relics');
+const { EVENTS } = require('../data/events');
 const { MONSTERS, monsterById, scaledMonster } = require('../data/monsters');
 const { generateMap, POTIONS, potionById } = require('../data/dungeon');
 const { itemById, weaponClassOf } = require('../data/items');
@@ -46,42 +50,48 @@ async function userArmor(userId) {
   return armor?.magic || 0;
 }
 
-// Get the loadout, falling back to defaults if the user has never set one.
-// Also strips any attacks that are no longer valid for the current weapon —
-// the client renders the result so the UI never shows orphaned moves.
+// Returns the starting deck for a new dungeon run, plus combat stats. The
+// deck is computed deterministically from the player's equipped weapon
+// class (5x Strike, 4x Defend, 1x class signature). The full card catalog
+// for that class is also returned for the loadout preview screen.
 router.get('/loadout', async (req, res) => {
   try {
-    const [{ rows }, weaponClass, magic, armor] = await Promise.all([
-      pool.query('SELECT slot1, slot2, slot3, slot4 FROM user_attacks WHERE user_id = $1', [req.userId]),
+    const [weaponClass, magic, armor] = await Promise.all([
       userWeaponClass(req.userId),
       userMagic(req.userId),
       userArmor(req.userId),
     ]);
-    const row = rows[0];
-    const stored = row ? [row.slot1, row.slot2, row.slot3, row.slot4] : [];
+    const deckIds = starterDeck(weaponClass);
+    const deck = deckIds.map(id => attackById(id)).filter(Boolean);
     const available = attacksForClass(weaponClass);
-    const availableIds = new Set(available.map(a => a.id));
-
-    // Prefer stored slot if still usable, otherwise fall back to a
-    // weapon-aware default (so swapping weapons lights up the new movepool
-    // immediately instead of leaving the player with Punch/Kick).
-    const fallback = defaultLoadoutFor(weaponClass);
-    const slots = [];
-    for (let i = 0; i < 4; i++) {
-      const candidate = stored[i] && availableIds.has(stored[i]) ? stored[i] : fallback[i];
-      slots.push(candidate);
-    }
-
     res.json({
-      slots,
-      slotDetails: slots.map(id => attackById(id)).filter(Boolean),
-      available,
+      deck,            // full card objects (includes duplicates)
+      deckIds,         // raw ids
+      available,       // catalog for the class (incl. reward-pool cards)
       weaponClass,
       magic,
       armor,
+      // Legacy fields so the old client doesn't crash mid-deploy:
+      slots: deckIds.slice(0, 4),
+      slotDetails: deck.slice(0, 4),
     });
   } catch (err) {
     console.error('dungeon/loadout error', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Picks 3 random cards from the reward pool for the given monster tier, so
+// the client can show a "pick 1 of 3 cards" screen after each combat.
+router.get('/reward-cards/:tier', async (req, res) => {
+  try {
+    const tier = parseInt(req.params.tier) || 1;
+    const weaponClass = await userWeaponClass(req.userId);
+    const pool = rewardPool(weaponClass, tier);
+    const picks = pickRewardCards(pool, 3);
+    res.json({ cards: picks });
+  } catch (err) {
+    console.error('dungeon/reward-cards error', err);
     res.status(500).json({ error: 'Server error' });
   }
 });
@@ -120,22 +130,66 @@ router.post('/loadout', async (req, res) => {
 // frontend can preview it on the map before committing.
 router.post('/run', async (req, res) => {
   try {
-    // Pull the player's current level so we can scale enemies — without this,
-    // a fully-geared high-level player trivialises every fight.
-    const { rows } = await pool.query('SELECT level FROM users WHERE id = $1', [req.userId]);
+    const { rows } = await pool.query('SELECT level, dungeon_ascension FROM users WHERE id = $1', [req.userId]);
     const level = rows[0]?.level || 1;
+    const userAscension = rows[0]?.dungeon_ascension || 0;
 
-    const map = generateMap();
+    // Biome + ascension picked at the entrance screen. Default = Catacombs A0.
+    const requestedBiome = req.body?.biome || 'catacombs';
+    const requestedAscension = Math.max(0, parseInt(req.body?.ascension) || 0);
+    const biome = biomeById(requestedBiome) || biomeById('catacombs');
+    // Lock biome behind required ascension level.
+    if (biome.unlockAtAscension > userAscension) {
+      return res.status(403).json({ error: `Locked. Reach Ascension ${biome.unlockAtAscension} to enter ${biome.name}.` });
+    }
+    // Cap chosen ascension at unlocked + 1 (you can play one level above, optionally).
+    const ascension = Math.min(requestedAscension, userAscension + 1);
+
+    const map = generateMap(biome.id);
     const nodes = map.nodes.map(n => {
       if (!n.monsterId) return n;
-      const m = scaledMonster(monsterById(n.monsterId), level);
+      // Ascension stacks a flat multiplier on top of level scaling.
+      const ascMult = 1 + ascension * 0.12;
+      const scaled = scaledMonster(monsterById(n.monsterId), level);
+      const m = scaled ? {
+        ...scaled,
+        hp: Math.round(scaled.hp * ascMult),
+        power: Math.round(scaled.power * (1 + ascension * 0.08)),
+        xp: Math.round(scaled.xp * (1 + ascension * 0.10)),
+      } : scaled;
       return { ...n, monster: m };
     });
-    res.json({ map: { nodes, edges: map.edges }, playerLevel: level });
+    res.json({
+      map: { nodes, edges: map.edges },
+      playerLevel: level,
+      biome,
+      ascension,
+      userAscension,
+    });
   } catch (err) {
     console.error('dungeon/run error', err);
     res.status(500).json({ error: 'Server error' });
   }
+});
+
+// List biomes the player can / can't enter, for the entrance picker.
+router.get('/biomes', async (req, res) => {
+  try {
+    const { rows } = await pool.query('SELECT dungeon_ascension FROM users WHERE id = $1', [req.userId]);
+    const asc = rows[0]?.dungeon_ascension || 0;
+    res.json(BIOMES.map(b => ({ ...b, unlocked: asc >= b.unlockAtAscension })));
+  } catch (err) {
+    console.error('dungeon/biomes error', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Catalog endpoints for the client to render relic / event details.
+router.get('/relics',     (req, res) => res.json(RELICS));
+router.get('/events',     (req, res) => res.json(EVENTS));
+router.post('/pick-relic', (req, res) => {
+  const rarity = req.body?.rarity;
+  res.json({ relic: pickRelic(rarity) });
 });
 
 // Claim XP+gold for defeating a monster. Server validates the monster id but

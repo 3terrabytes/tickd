@@ -161,6 +161,20 @@ const initDB = async () => {
     -- Dungeon: how many bosses the player has cleared (ascension level).
     -- Surfaced on /auth/me and used to gate harder difficulties.
     ALTER TABLE users ADD COLUMN IF NOT EXISTS dungeon_ascension INTEGER DEFAULT 0;
+
+    -- PvP duels — async, friends-only, XP-only rewards.
+    CREATE TABLE IF NOT EXISTS duels (
+      id SERIAL PRIMARY KEY,
+      challenger_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      opponent_id   INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      winner_id     INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      challenger_xp INTEGER DEFAULT 0,
+      opponent_xp   INTEGER DEFAULT 0,
+      log           JSONB,
+      created_at    TIMESTAMP DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_duels_challenger ON duels(challenger_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_duels_opponent   ON duels(opponent_id, created_at DESC);
   `);
   // Grant infinite gold + admin flag to theDevs account (if it exists)
   await pool.query(`
