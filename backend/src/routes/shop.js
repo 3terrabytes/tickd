@@ -13,15 +13,21 @@ const serialisePacks = () => PACKS.map(p => ({
   discount: packDiscount(p),
 }));
 
-// Get shop items + packs + user gold + owned items
+// Get shop items + packs + user gold + owned items.
+// Legends-only (Mythic) items are gated to level 10+. Below that level they're
+// filtered out entirely so the user doesn't see anything they can't buy.
 router.get('/shop', async (req, res) => {
-  const { rows: userRows } = await pool.query('SELECT gold FROM users WHERE id = $1', [req.userId]);
+  const { rows: userRows } = await pool.query('SELECT gold, level FROM users WHERE id = $1', [req.userId]);
   const { rows: owned } = await pool.query('SELECT item_id FROM user_inventory WHERE user_id = $1', [req.userId]);
+  const level = userRows[0]?.level || 1;
+  const items = level >= 10 ? ITEMS : ITEMS.filter(i => !i.legendsOnly);
   res.json({
     gold: userRows[0]?.gold || 0,
-    items: ITEMS,
+    level,
+    items,
     packs: serialisePacks(),
     ownedIds: owned.map(r => r.item_id),
+    legendsUnlocked: level >= 10,
   });
 });
 
@@ -30,9 +36,14 @@ router.post('/shop/buy/:itemId', async (req, res) => {
   const item = itemById(req.params.itemId);
   if (!item) return res.status(404).json({ error: 'Item not found' });
 
-  const { rows } = await pool.query('SELECT gold, username FROM users WHERE id = $1', [req.userId]);
+  const { rows } = await pool.query('SELECT gold, level, username FROM users WHERE id = $1', [req.userId]);
   const user = rows[0];
   const isTheDevs = user?.username?.toLowerCase() === 'thedevs';
+
+  // Server-side L10 gate for Legends-only items.
+  if (item.legendsOnly && (user?.level || 1) < 10 && !isTheDevs) {
+    return res.status(403).json({ error: 'Legends shop unlocks at Level 10' });
+  }
 
   if (!isTheDevs && (user?.gold || 0) < item.cost) return res.status(400).json({ error: 'Not enough gold' });
 

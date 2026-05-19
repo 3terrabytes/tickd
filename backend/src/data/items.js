@@ -3,6 +3,7 @@ const RARITIES = {
   rare:      { label: 'Rare',      color: '#3b82f6', glow: '#3b82f633', magic: [6, 15] },
   epic:      { label: 'Epic',      color: '#8b5cf6', glow: '#8b5cf633', magic: [16, 30] },
   legendary: { label: 'Legendary', color: '#f59e0b', glow: '#f59e0b33', magic: [31, 50] },
+  mythic:    { label: 'Mythic',    color: '#f0abfc', glow: '#f0abfc55', magic: [51, 80] },
 };
 
 const ITEMS = [
@@ -167,6 +168,19 @@ const ITEMS = [
   { id: 'potion_gold',     type: 'consumable', name: 'Gold Pouch',       rarity: 'rare',      cost: 350, magic: 0, emoji: '💰', desc: 'A modest sack of coins. Pocket it.' },
   { id: 'cake_birthday',   type: 'consumable', name: 'Birthday Cake',    rarity: 'epic',      cost: 666, magic: 0, emoji: '🎂', desc: 'A celebration in confection form. Big XP, big mood.' },
   { id: 'scroll_double',   type: 'consumable', name: 'Doubler Scroll',   rarity: 'legendary', cost: 1500, magic: 0, emoji: '📜', desc: 'A truly stupid amount of XP. Once-in-a-lifetime.' },
+
+  // ── MYTHIC TIER (Legends shop, unlocked at Lv 10) ────────────────────
+  // Costs 2000-4000g. Magic Power 51-80. Visible only when level ≥ 10.
+  { id: 'sword_starfall',    type: 'weapon',    name: 'Starfall Blade',    rarity: 'mythic', cost: 3800, magic: 70, emoji: '☄️', desc: 'Forged from the bones of a dying sun. Hums with starlight.', legendsOnly: true },
+  { id: 'staff_eternity',    type: 'weapon',    name: 'Staff of Eternity', rarity: 'mythic', cost: 3500, magic: 68, emoji: '🪄', desc: 'Channels magic from outside time itself.', legendsOnly: true },
+  { id: 'armor_chronos',     type: 'armor',     name: 'Chronos Plate',     rarity: 'mythic', cost: 3500, magic: 65, emoji: '⏳', desc: 'Stops time briefly when struck. The instant repeats.', legendsOnly: true },
+  { id: 'armor_singular',    type: 'armor',     name: 'Singularity Cloak', rarity: 'mythic', cost: 3200, magic: 62, emoji: '🕳️', desc: 'A garment hemmed with collapsed stars.', legendsOnly: true },
+  { id: 'pet_celestial',     type: 'companion', name: 'Celestial Phoenix', rarity: 'mythic', cost: 4000, magic: 75, emoji: '✨', desc: 'A creature from before the first stars. Loyalty unmeasurable.', legendsOnly: true },
+  { id: 'pet_void',          type: 'companion', name: 'Void Drake',        rarity: 'mythic', cost: 3700, magic: 72, emoji: '🐉', desc: 'It speaks no language but its silence is louder than war.', legendsOnly: true },
+  { id: 'banner_singularity',type: 'banner',    name: 'Singularity Banner',rarity: 'mythic', cost: 2500, magic: 0,  color: 'linear-gradient(90deg,#000000,#7c3aed,#f0abfc,#22d3ee,#fbbf24,#000000)', desc: 'Every colour at once. The horizon of the impossible.', legendsOnly: true },
+  { id: 'badge_omega',       type: 'badge',     name: 'Omega Badge',       rarity: 'mythic', cost: 2200, magic: 0,  emoji: 'Ω',  desc: 'The end. The beginning. The mark of a true legend.', legendsOnly: true },
+  { id: 'title_ascendant',   type: 'title',     name: '"The Ascendant"',   rarity: 'mythic', cost: 2200, magic: 0,  emoji: '🌌', desc: 'Beyond mortal reach.', legendsOnly: true },
+  { id: 'title_godslayer',   type: 'title',     name: '"Godslayer"',       rarity: 'mythic', cost: 3000, magic: 0,  emoji: '⚔️', desc: 'You have ended gods.', legendsOnly: true },
 ];
 
 // ── PACKS ────────────────────────────────────────────────────────────────

@@ -11,6 +11,7 @@ const RARITY_STYLES = {
   rare:      { color: '#3b82f6', label: 'Rare',      border: '#3b82f644' },
   epic:      { color: '#8b5cf6', label: 'Epic',      border: '#8b5cf644' },
   legendary: { color: '#f59e0b', label: 'Legendary', border: '#f59e0b44' },
+  mythic:    { color: '#f0abfc', label: 'Mythic',    border: '#f0abfc66' },
 };
 const RARITY_FALLBACK = { color: '#9ca3af', label: 'Common', border: '#9ca3af44' };
 const rarityOf = (item) => (item && RARITY_STYLES[item.rarity]) || RARITY_FALLBACK;
@@ -32,7 +33,7 @@ const SECTION_LABELS = {
 };
 
 // Sort order for rarities — used by the shop sort dropdown.
-const RARITY_ORDER = { common: 0, rare: 1, epic: 2, legendary: 3 };
+const RARITY_ORDER = { common: 0, rare: 1, epic: 2, legendary: 3, mythic: 4 };
 
 const SORT_OPTIONS = [
   { k: 'default',     label: 'Default' },
@@ -44,7 +45,7 @@ const SORT_OPTIONS = [
   { k: 'name_asc',    label: 'Name: A → Z' },
 ];
 
-const RARITY_FILTERS = ['all', 'common', 'rare', 'epic', 'legendary'];
+const RARITY_FILTERS = ['all', 'common', 'rare', 'epic', 'legendary', 'mythic'];
 
 export default function AvatarPage() {
   const { user, refreshUser } = useAuth();
@@ -227,9 +228,19 @@ export default function AvatarPage() {
   const ownedSet = new Set(shopData.ownedIds);
   const query = shopQuery.trim().toLowerCase();
 
+  const legendsUnlocked = shopData.legendsUnlocked === true || (user?.level || 1) >= 10;
+
   const filteredShop = (() => {
     if (shopFilter === 'pack') return [];
+    // Legends tab shows only Mythic-rarity items, all categories.
+    if (shopFilter === 'legends') {
+      if (!legendsUnlocked) return [];
+      return shopData.items.filter(i => i.rarity === 'mythic');
+    }
     let list = shopData.items;
+    // Outside the Legends tab, hide mythic items from the All/Type views so
+    // they don't bleed through and need a separate "tab" feel.
+    list = list.filter(i => i.rarity !== 'mythic');
     if (shopFilter !== 'all') list = list.filter(i => i.type === shopFilter);
     if (shopRarity !== 'all') list = list.filter(i => i.rarity === shopRarity);
     if (query) list = list.filter(i =>
@@ -496,12 +507,25 @@ export default function AvatarPage() {
           </aside>
           <div style={styles.gridCol}>
           <div style={styles.filterRow}>
-            {['all', 'pack', ...TYPES, 'consumable'].map(f => (
-              <button key={f} style={{ ...styles.filterBtn, ...(shopFilter === f ? styles.filterBtnActive : {}) }}
-                onClick={() => setShopFilter(f)}>
-                {f === 'all' ? 'All' : f === 'pack' ? '🎁 Packs' : f.charAt(0).toUpperCase() + f.slice(1)}
-              </button>
-            ))}
+            {['all', 'pack', ...TYPES, 'consumable', 'legends'].map(f => {
+              const isLegends = f === 'legends';
+              const active = shopFilter === f;
+              return (
+                <button key={f}
+                  style={{
+                    ...styles.filterBtn,
+                    ...(active ? styles.filterBtnActive : {}),
+                    ...(isLegends && !active ? { color: '#f0abfc', borderColor: '#f0abfc66' } : {}),
+                    ...(isLegends && active ? { background: '#f0abfc', borderColor: '#f0abfc', color: '#1a0820' } : {}),
+                  }}
+                  onClick={() => setShopFilter(f)}>
+                  {f === 'all' ? 'All'
+                    : f === 'pack' ? '🎁 Packs'
+                    : f === 'legends' ? '🌟 Legends'
+                    : f.charAt(0).toUpperCase() + f.slice(1)}
+                </button>
+              );
+            })}
           </div>
 
           {/* Rarity filter chips */}
@@ -633,12 +657,57 @@ export default function AvatarPage() {
               );
             };
 
+            // Special locked state for the Legends tab if user is under L10.
+            if (shopFilter === 'legends' && !legendsUnlocked) {
+              const lvl = user?.level || 1;
+              return (
+                <div style={{
+                  textAlign: 'center', padding: '48px 24px',
+                  background: 'radial-gradient(circle at 50% 0%, rgba(240,171,252,0.18) 0%, transparent 60%), var(--bg2)',
+                  border: '1px solid #f0abfc44', borderRadius: 12,
+                }}>
+                  <div style={{ fontSize: 64, marginBottom: 8 }}>🔒</div>
+                  <div style={{ fontFamily: 'Cinzel,serif', fontSize: 22, color: '#f0abfc', marginBottom: 4 }}>The Legends Shop</div>
+                  <p style={{ color: 'var(--text-muted)', fontSize: 13, marginBottom: 14, maxWidth: 360, margin: '0 auto 14px' }}>
+                    A vault of Mythic items, beyond Legendary. Costs 2200-4000 gold each.
+                    Unlocks when you reach <strong style={{ color: '#f0abfc' }}>Level 10</strong>.
+                  </p>
+                  <div style={{ display: 'inline-block', padding: '8px 16px', borderRadius: 99, background: 'var(--bg3)', border: '1px solid var(--border)' }}>
+                    <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>You are </span>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: '#f0abfc' }}>Level {lvl}</span>
+                    <span style={{ fontSize: 13, color: 'var(--text-muted)' }}> · {10 - lvl} levels to go</span>
+                  </div>
+                </div>
+              );
+            }
+
             if (filteredShop.length === 0 && shopFilter !== 'pack') {
               return (
                 <div style={styles.empty}>
                   <div style={{ fontSize: 40, marginBottom: 8 }}>🔍</div>
                   <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>No items match those filters.</p>
                 </div>
+              );
+            }
+
+            // Legends tab gets a banner above the grid to set the mood.
+            if (shopFilter === 'legends') {
+              return (
+                <>
+                  <div style={{
+                    padding: '14px 16px', marginBottom: 14, borderRadius: 12,
+                    background: 'linear-gradient(135deg, rgba(240,171,252,0.18), rgba(124,58,237,0.12))',
+                    border: '1px solid #f0abfc55', textAlign: 'center',
+                  }}>
+                    <div style={{ fontFamily: 'Cinzel,serif', fontSize: 18, color: '#f0abfc', marginBottom: 2 }}>
+                      🌟 The Legends Shop
+                    </div>
+                    <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                      Mythic-tier items — beyond Legendary. Limited stock for those who've proven themselves.
+                    </div>
+                  </div>
+                  <div style={styles.grid}>{filteredShop.map(renderItem)}</div>
+                </>
               );
             }
 

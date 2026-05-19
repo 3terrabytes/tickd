@@ -3,7 +3,7 @@ const { pool } = require('../db');
 const auth = require('../middleware/auth');
 const { addXP } = require('../utils/xp');
 const { ATTACKS, attackById, attacksForClass, DEFAULT_LOADOUT, defaultLoadoutFor } = require('../data/attacks');
-const { MONSTERS, monsterById } = require('../data/monsters');
+const { MONSTERS, monsterById, scaledMonster } = require('../data/monsters');
 const { generateMap, POTIONS, potionById } = require('../data/dungeon');
 const { itemById, weaponClassOf } = require('../data/items');
 
@@ -120,14 +120,18 @@ router.post('/loadout', async (req, res) => {
 // frontend can preview it on the map before committing.
 router.post('/run', async (req, res) => {
   try {
+    // Pull the player's current level so we can scale enemies — without this,
+    // a fully-geared high-level player trivialises every fight.
+    const { rows } = await pool.query('SELECT level FROM users WHERE id = $1', [req.userId]);
+    const level = rows[0]?.level || 1;
+
     const map = generateMap();
-    // Decorate combat nodes with full monster data for the frontend preview.
     const nodes = map.nodes.map(n => {
       if (!n.monsterId) return n;
-      const m = monsterById(n.monsterId);
+      const m = scaledMonster(monsterById(n.monsterId), level);
       return { ...n, monster: m };
     });
-    res.json({ map: { nodes, edges: map.edges } });
+    res.json({ map: { nodes, edges: map.edges }, playerLevel: level });
   } catch (err) {
     console.error('dungeon/run error', err);
     res.status(500).json({ error: 'Server error' });
@@ -139,15 +143,29 @@ router.post('/run', async (req, res) => {
 router.post('/reward', async (req, res) => {
   try {
     const { monsterId } = req.body;
-    const monster = monsterById(monsterId);
-    if (!monster) return res.status(400).json({ error: 'Unknown monster' });
+    const baseMonster = monsterById(monsterId);
+    if (!baseMonster) return res.status(400).json({ error: 'Unknown monster' });
+
+    // Look up the player's level so we can scale the XP reward to match the
+    // scaled difficulty. Gold stays at the flat base value.
+    const { rows: userRows } = await pool.query('SELECT level FROM users WHERE id = $1', [req.userId]);
+    const level = userRows[0]?.level || 1;
+    const monster = scaledMonster(baseMonster, level);
 
     await addXP(req.userId, monster.xp);
     await pool.query(
       'UPDATE users SET gold = gold + $1, lifetime_gold = COALESCE(lifetime_gold, 0) + $1 WHERE id = $2',
       [monster.gold, req.userId]
     );
-    const { rows } = await pool.query('SELECT xp, level, gold FROM users WHERE id = $1', [req.userId]);
+    // Bumping ascension on every boss kill — surfaces on /auth/me for the
+    // entrance-screen ascension chip and future difficulty modifiers.
+    if (baseMonster.tier === 5) {
+      await pool.query(
+        'UPDATE users SET dungeon_ascension = COALESCE(dungeon_ascension, 0) + 1 WHERE id = $1',
+        [req.userId]
+      );
+    }
+    const { rows } = await pool.query('SELECT xp, level, gold, dungeon_ascension FROM users WHERE id = $1', [req.userId]);
     res.json({ xp: monster.xp, gold: monster.gold, user: rows[0] });
   } catch (err) {
     console.error('dungeon/reward error', err);

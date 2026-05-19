@@ -96,9 +96,15 @@ router.post('/purchase/:itemId', async (req, res) => {
   try {
     await client.query('BEGIN');
 
-    const { rows } = await client.query('SELECT gold, username FROM users WHERE id = $1', [req.userId]);
+    const { rows } = await client.query('SELECT gold, level, username FROM users WHERE id = $1', [req.userId]);
     const me = rows[0];
     const isTheDevs = me?.username?.toLowerCase() === 'thedevs';
+
+    // Legends-only items: the BUYER must be L10+ to purchase, period.
+    if (item.legendsOnly && (me?.level || 1) < 10 && !isTheDevs) {
+      await client.query('ROLLBACK');
+      return res.status(403).json({ error: 'Legends shop unlocks at Level 10' });
+    }
 
     if (!isTheDevs && (me?.gold || 0) < item.cost) {
       await client.query('ROLLBACK');

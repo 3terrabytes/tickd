@@ -157,6 +157,10 @@ const initDB = async () => {
       slot3 VARCHAR(40),
       slot4 VARCHAR(40)
     );
+
+    -- Dungeon: how many bosses the player has cleared (ascension level).
+    -- Surfaced on /auth/me and used to gate harder difficulties.
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS dungeon_ascension INTEGER DEFAULT 0;
   `);
   // Grant infinite gold + admin flag to theDevs account (if it exists)
   await pool.query(`

@@ -38,6 +38,24 @@ const MONSTERS = [
 
 const monsterById = (id) => MONSTERS.find(m => m.id === id);
 
+// Scale a monster's HP / damage / XP reward to the player's level so combat
+// stays meaningful as gear improves. Below L4 the monster is unchanged;
+// above that, +12% HP, +8% power, +10% xp per level (gold left flat since
+// gold is rebalanced separately).
+const scaleStats = (base, mult) => Math.round(base * mult);
+const scaledMonster = (monster, playerLevel) => {
+  if (!monster) return monster;
+  const lv = Math.max(1, playerLevel || 1);
+  const surplus = Math.max(0, lv - 3);
+  if (surplus === 0) return monster;
+  return {
+    ...monster,
+    hp: scaleStats(monster.hp, 1 + surplus * 0.12),
+    power: scaleStats(monster.power, 1 + surplus * 0.08),
+    xp: scaleStats(monster.xp, 1 + surplus * 0.10),
+  };
+};
+
 // Pick a monster intent for the next turn. Pattern:
 //   - Heavy hit every 3rd turn
 //   - Defend every 4th turn (mid+ tiers)
@@ -53,4 +71,4 @@ function pickIntent(monster, turn) {
   return { kind: 'strike', power: monster.power };
 }
 
-module.exports = { MONSTERS, monsterById, pickIntent };
+module.exports = { MONSTERS, monsterById, pickIntent, scaledMonster };
