@@ -195,6 +195,71 @@ export default function FriendsPage() {
   const [giftMsg, setGiftMsg]         = useState('');
   const [giftStatus, setGiftStatus]   = useState(null);
 
+  // ── PvP Battle state ──
+  // `activeBattle` is whatever the current pending/active battle is (or null).
+  // `battleModalOpen` is true while we're showing the battle UI.
+  // `battleError` shows a one-off message in the modal.
+  const [activeBattle, setActiveBattle]   = useState(null);
+  const [battleModalOpen, setBattleModal] = useState(false);
+  const [battleBusy, setBattleBusy]       = useState(false);
+  const [battleError, setBattleError]     = useState(null);
+
+  const refreshBattle = async () => {
+    try {
+      const { battle } = await api.battles.active();
+      setActiveBattle(battle);
+      return battle;
+    } catch { return null; }
+  };
+
+  useEffect(() => {
+    refreshBattle();
+    // Poll every 20s so we see the opponent's turn without manual refresh.
+    const id = setInterval(refreshBattle, 20_000);
+    return () => clearInterval(id);
+  }, []);
+
+  const challengeFriend = async (friend) => {
+    setBattleError(null);
+    setBattleBusy(true);
+    try {
+      const { battle } = await api.battles.challenge(friend.id);
+      setActiveBattle(battle);
+      setBattleModal(true);
+    } catch (err) {
+      setBattleError(err.message);
+      // If they already have one, just open it.
+      const existing = await refreshBattle();
+      if (existing) setBattleModal(true);
+    }
+    setBattleBusy(false);
+  };
+
+  const takeTurn = async (attackId) => {
+    if (!activeBattle || battleBusy) return;
+    setBattleBusy(true); setBattleError(null);
+    try {
+      const { battle } = await api.battles.turn(activeBattle.id, attackId);
+      setActiveBattle(battle);
+    } catch (err) {
+      setBattleError(err.message);
+    }
+    setBattleBusy(false);
+  };
+
+  const forfeitBattle = async () => {
+    if (!activeBattle || battleBusy) return;
+    if (!window.confirm('Forfeit this battle? Opponent will win automatically.')) return;
+    setBattleBusy(true);
+    try {
+      const { battle } = await api.battles.forfeit(activeBattle.id);
+      setActiveBattle(battle);
+    } catch (err) {
+      setBattleError(err.message);
+    }
+    setBattleBusy(false);
+  };
+
   const load = async () => {
     const [f, p, tp, inv] = await Promise.all([
       api.friends.list(),
@@ -303,6 +368,42 @@ export default function FriendsPage() {
         <FriendProfileCard friend={selectedFriend} onClose={() => setSelectedFriend(null)} />
       )}
 
+      {/* Active battle banner — visible whenever the user is in one. */}
+      {activeBattle && activeBattle.status === 'active' && !battleModalOpen && (
+        <div onClick={() => setBattleModal(true)} style={{
+          padding: '10px 14px', borderRadius: 12,
+          background: activeBattle.yourTurn
+            ? 'linear-gradient(90deg, rgba(239,68,68,0.18), rgba(127,29,29,0.18))'
+            : 'linear-gradient(90deg, rgba(99,102,241,0.15), rgba(30,58,138,0.12))',
+          border: `1px solid ${activeBattle.yourTurn ? '#ef444466' : '#6366f166'}`,
+          cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10,
+        }}>
+          <span style={{ fontSize: 22 }}>🗡️</span>
+          <div style={{ flex: 1, fontSize: 13 }}>
+            <div style={{ fontWeight: 700, color: activeBattle.yourTurn ? '#fca5a5' : '#a5b4fc' }}>
+              {activeBattle.yourTurn ? 'YOUR TURN' : "OPPONENT'S TURN"}
+              {' — '}
+              vs {activeBattle.youAreChallenger ? activeBattle.opponent?.username : activeBattle.challenger?.username}
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+              Round {activeBattle.turn_count + 1} · Click to {activeBattle.yourTurn ? 'take your turn' : 'view'}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {battleModalOpen && activeBattle && (
+        <BattleModal
+          battle={activeBattle}
+          busy={battleBusy}
+          error={battleError}
+          onTurn={takeTurn}
+          onForfeit={forfeitBattle}
+          onRefresh={refreshBattle}
+          onClose={() => { setBattleModal(false); setBattleError(null); }}
+        />
+      )}
+
       {/* Tab bar */}
       <div style={{ display: 'flex', background: 'var(--bg2)', borderRadius: 12, padding: 4, border: '1px solid var(--border)', gap: 2, overflowX: 'auto' }}>
         {TABS.map(t => (
@@ -385,6 +486,11 @@ export default function FriendsPage() {
                 </div>
               </div>
               <div style={{ display: 'flex', gap: 6 }} onClick={e => e.stopPropagation()}>
+                <button className="btn btn-ghost" style={{ padding: '6px 10px', fontSize: 11, color: '#fca5a5' }}
+                  title="Battle this player"
+                  onClick={() => challengeFriend(f)} disabled={battleBusy || (activeBattle && activeBattle.status === 'active')}>
+                  🗡️
+                </button>
                 <button className="btn btn-ghost" style={{ padding: '6px 10px', fontSize: 11 }} onClick={() => openGift(f)}>🎁</button>
                 <button className="btn btn-ghost" style={{ padding: '6px 10px', fontSize: 11 }} onClick={() => openTrade(f)}>⚔️</button>
                 <button className="btn btn-ghost" style={{ padding: '6px 10px', fontSize: 11, color: 'var(--red)' }} onClick={() => remove(f.id)}>×</button>
@@ -785,3 +891,147 @@ const S = {
   },
   empty: { textAlign: 'center', padding: 32 },
 };
+
+
+// -- Battle Modal -----------------------------------------------------
+// Shows HP bars + the last few log lines. Picks an attack if it's your turn,
+// otherwise shows a "waiting for opponent" state.
+function BattleModal({ battle, busy, error, onTurn, onForfeit, onRefresh, onClose }) {
+  const finished = battle.status === 'finished';
+  const youWon = finished && battle.winner_id === (battle.youAreChallenger ? battle.challenger?.id : battle.opponent?.id);
+  const you = battle.youAreChallenger ? battle.challenger : battle.opponent;
+  const them = battle.youAreChallenger ? battle.opponent : battle.challenger;
+  const yourHp    = battle.youAreChallenger ? battle.challenger_hp : battle.opponent_hp;
+  const yourMax   = battle.youAreChallenger ? battle.challenger_max_hp : battle.opponent_max_hp;
+  const theirHp   = battle.youAreChallenger ? battle.opponent_hp : battle.challenger_hp;
+  const theirMax  = battle.youAreChallenger ? battle.opponent_max_hp : battle.challenger_max_hp;
+
+  const lastFive = (battle.log || []).slice(-6);
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 300, padding: 16,
+    }}>
+      <div className="card" style={{
+        maxWidth: 520, width: '100%', padding: 18,
+        background: 'radial-gradient(ellipse at 50% 0%, rgba(127,29,29,0.25) 0%, var(--bg2) 60%)',
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <div style={{ fontFamily: 'Cinzel,serif', fontSize: 18 }}>
+            ??? vs {them?.username} <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>� Lv {them?.level}</span>
+          </div>
+          <button className="btn btn-ghost" onClick={onClose} style={{ padding: '4px 10px', fontSize: 13 }}>�</button>
+        </div>
+
+        {/* HP bars */}
+        <div style={{ marginBottom: 12 }}>
+          <BattleHp label={`${you?.username} (you)`} value={yourHp} max={yourMax} color="#10b981" />
+          <div style={{ height: 8 }} />
+          <BattleHp label={`${them?.username}`}   value={theirHp} max={theirMax} color="#ef4444" />
+        </div>
+
+        {/* Log */}
+        <div style={{
+          maxHeight: 140, overflowY: 'auto', padding: 10, marginBottom: 12,
+          background: 'var(--bg3)', borderRadius: 8, border: '1px solid var(--border)',
+        }}>
+          {lastFive.length === 0
+            ? <div style={{ fontSize: 12, color: 'var(--text-muted)', fontStyle: 'italic' }}>The battle begins.</div>
+            : lastFive.map((l, i) => (
+              <div key={i} style={{ fontSize: 12, color: 'var(--text)', marginBottom: 3, lineHeight: 1.35, whiteSpace: 'pre-line' }}>
+                {l.text}
+              </div>
+            ))}
+        </div>
+
+        {error && (
+          <div style={{ color: '#fca5a5', fontSize: 12, padding: 8, background: 'rgba(239,68,68,0.12)', borderRadius: 6, marginBottom: 10 }}>
+            {error}
+          </div>
+        )}
+
+        {/* Action area */}
+        {finished ? (
+          <div style={{
+            padding: 14, borderRadius: 10, textAlign: 'center',
+            background: youWon ? 'rgba(16,185,129,0.15)' : 'rgba(127,29,29,0.18)',
+            border: `1px solid ${youWon ? '#10b98166' : '#ef444466'}`,
+          }}>
+            <div style={{ fontFamily: 'Cinzel,serif', fontSize: 22, color: youWon ? '#6ee7b7' : '#fca5a5', marginBottom: 4 }}>
+              {youWon ? 'VICTORY' : 'DEFEAT'}
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>
+              Battle ended in round {battle.turn_count}.
+            </div>
+            <button className="btn btn-primary" onClick={onClose} style={{ padding: '8px 22px' }}>Close</button>
+          </div>
+        ) : battle.yourTurn ? (
+          <>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', letterSpacing: '0.08em', fontWeight: 600, marginBottom: 6 }}>
+              YOUR TURN � PICK AN ATTACK
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 8, marginBottom: 10 }}>
+              {(battle.availableAttacks || []).map(a => (
+                <button key={a.id}
+                  disabled={busy}
+                  onClick={() => onTurn(a.id)}
+                  style={{
+                    padding: 10, borderRadius: 8, cursor: 'pointer',
+                    background: 'var(--bg3)', border: '1px solid var(--border)',
+                    color: 'var(--text)', textAlign: 'left',
+                    opacity: busy ? 0.5 : 1,
+                  }}>
+                  <div style={{ fontSize: 16, marginBottom: 2 }}>{a.emoji} <span style={{ fontSize: 12, fontWeight: 700 }}>{a.name}</span></div>
+                  <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>
+                    {a.tag === 'heal' ? `+${a.heal} HP` : `${a.power} dmg`}
+                    {a.tag === 'burn' ? ' � BURN' : ''}
+                    {a.tag === 'poison' ? ' � POISON' : ''}
+                    {a.tag === 'stun' ? ' � STUN' : ''}
+                  </div>
+                </button>
+              ))}
+            </div>
+          </>
+        ) : (
+          <div style={{
+            padding: 14, borderRadius: 10, textAlign: 'center',
+            background: 'rgba(99,102,241,0.12)', border: '1px solid #6366f155',
+            marginBottom: 10,
+          }}>
+            <div style={{ fontSize: 24, marginBottom: 4 }}>?</div>
+            <div style={{ fontSize: 13, color: 'var(--text)' }}>
+              Waiting for <strong>{them?.username}</strong> to take their turn�
+            </div>
+            <button className="btn btn-ghost" onClick={onRefresh} style={{ padding: '6px 16px', fontSize: 12, marginTop: 8 }}>
+              ? Refresh
+            </button>
+          </div>
+        )}
+
+        {!finished && (
+          <div style={{ textAlign: 'right' }}>
+            <button className="btn btn-ghost" onClick={onForfeit} style={{ padding: '4px 10px', fontSize: 11, color: '#fca5a5' }}>
+              ?? Forfeit
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function BattleHp({ label, value, max, color }) {
+  const pct = Math.max(0, Math.min(100, (value / max) * 100));
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 2 }}>
+        <span style={{ fontWeight: 600, color: 'var(--text)' }}>{label}</span>
+        <span style={{ color: 'var(--text-muted)' }}>{value} / {max}</span>
+      </div>
+      <div style={{ position: 'relative', height: 12, background: 'var(--bg3)', borderRadius: 99, overflow: 'hidden', border: '1px solid var(--border)' }}>
+        <div style={{ height: '100%', width: `${pct}%`, background: color, transition: 'width 0.4s ease' }} />
+      </div>
+    </div>
+  );
+}

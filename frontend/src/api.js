@@ -98,6 +98,13 @@ export const api = {
   stats: {
     get: () => req('GET', '/stats'),
   },
+  battles: {
+    active:    () => req('GET',  '/battles/active'),
+    history:   () => req('GET',  '/battles/history'),
+    challenge: (friendId) => req('POST', `/battles/challenge/${friendId}`),
+    turn:      (id, attackId) => req('POST', `/battles/${id}/turn`, { attackId }),
+    forfeit:   (id) => req('POST', `/battles/${id}/forfeit`),
+  },
   dungeon: {
     loadout: () => req('GET', '/dungeon/loadout'),
     saveLoadout: (slots) => req('POST', '/dungeon/loadout', { slots }),

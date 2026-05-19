@@ -161,6 +161,27 @@ const initDB = async () => {
     -- Dungeon: how many bosses the player has cleared (ascension level).
     -- Surfaced on /auth/me and used to gate harder difficulties.
     ALTER TABLE users ADD COLUMN IF NOT EXISTS dungeon_ascension INTEGER DEFAULT 0;
+
+    -- PvP Battles — async turn-based. One active battle per user; alternating
+    -- turns; unlimited rounds until someone hits 0 HP or forfeits.
+    CREATE TABLE IF NOT EXISTS battles (
+      id SERIAL PRIMARY KEY,
+      challenger_id     INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      opponent_id       INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      status            VARCHAR(20) DEFAULT 'active',  -- active | finished
+      turn_user_id      INTEGER REFERENCES users(id),
+      challenger_hp     INTEGER NOT NULL,
+      opponent_hp       INTEGER NOT NULL,
+      challenger_max_hp INTEGER NOT NULL,
+      opponent_max_hp   INTEGER NOT NULL,
+      turn_count        INTEGER DEFAULT 0,
+      log               JSONB DEFAULT '[]'::jsonb,
+      winner_id         INTEGER REFERENCES users(id),
+      created_at        TIMESTAMP DEFAULT NOW(),
+      updated_at        TIMESTAMP DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_battles_challenger ON battles(challenger_id, status);
+    CREATE INDEX IF NOT EXISTS idx_battles_opponent   ON battles(opponent_id, status);
   `);
   // Grant infinite gold + admin flag to theDevs account (if it exists)
   await pool.query(`

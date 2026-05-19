@@ -21,6 +21,7 @@ app.use('/api/achievements', require('./routes/achievements'));
 app.use('/api/stats', require('./routes/stats'));
 app.use('/api/admin', require('./routes/admin'));
 app.use('/api/dungeon', require('./routes/dungeon'));
+app.use('/api/battles', require('./routes/battles'));
 
 app.get('/api/health', (_, res) => res.json({ status: 'ok' }));
 
