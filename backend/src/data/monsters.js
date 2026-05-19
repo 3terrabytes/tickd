@@ -34,24 +34,6 @@ const MONSTERS = [
   { id: 'dragon',      name: 'Ancient Dragon',  tier: 5, hp: 220, power: 28, xp: 260, gold: 90, sprite: '🐉', element: 'fire',      taunt: 'The dungeon shakes as it roars.' },
   { id: 'demon_lord',  name: 'Demon Lord',      tier: 5, hp: 240, power: 30, xp: 280, gold: 100, sprite: '😈', element: 'shadow',    taunt: '"At last. A challenger."' },
   { id: 'void_knight', name: 'Void Knight',     tier: 5, hp: 250, power: 26, xp: 300, gold: 110, sprite: '🌌', element: 'arcane',    taunt: 'A figure of impossible darkness draws its blade.' },
-
-  // ── Forge biome (T2-T4 + boss) ───────────────────────────────────────
-  { id: 'cinder_imp',    name: 'Cinder Imp',     tier: 2, hp: 42,  power: 11, xp: 36,  gold: 9,   sprite: '😈', element: 'fire',     taunt: 'It cackles, spitting embers.' },
-  { id: 'magma_beast',   name: 'Magma Beast',    tier: 3, hp: 95,  power: 16, xp: 70,  gold: 22,  sprite: '🌋', element: 'fire',     taunt: 'The floor warps under its weight.' },
-  { id: 'flame_wraith',  name: 'Flame Wraith',   tier: 3, hp: 75,  power: 18, xp: 72,  gold: 24,  sprite: '🔥', element: 'fire',     taunt: 'A ghost of fire and rage.' },
-  { id: 'iron_sentinel', name: 'Iron Sentinel',  tier: 4, hp: 130, power: 19, xp: 115, gold: 38,  sprite: '🤖', element: 'physical', taunt: 'Its eyes glow molten red.' },
-  { id: 'pyroclast',     name: 'Pyroclast',      tier: 4, hp: 110, power: 23, xp: 120, gold: 40,  sprite: '☄️', element: 'fire',     taunt: 'Lava roils around its core.' },
-  { id: 'slag_golem',    name: 'Slag Golem',     tier: 4, hp: 140, power: 18, xp: 125, gold: 42,  sprite: '🪨', element: 'physical', taunt: 'Half stone, half fire.' },
-  { id: 'forge_master',  name: 'The Forge Master',tier:5, hp: 280, power: 30, xp: 320, gold: 130, sprite: '⚒️', element: 'fire',     taunt: '"I hammered these halls into existence."' },
-
-  // ── Void biome (T3-T5 + boss) ────────────────────────────────────────
-  { id: 'void_spawn',    name: 'Void Spawn',     tier: 3, hp: 78,  power: 17, xp: 72,  gold: 26,  sprite: '🦑', element: 'arcane',   taunt: 'It blinks in and out of reality.' },
-  { id: 'star_eater',    name: 'Star Eater',     tier: 4, hp: 125, power: 22, xp: 125, gold: 44,  sprite: '🌑', element: 'shadow',   taunt: 'A hunger without form.' },
-  { id: 'null_wraith',   name: 'Null Wraith',    tier: 4, hp: 100, power: 24, xp: 130, gold: 46,  sprite: '👁', element: 'shadow',   taunt: 'It speaks in mathematics.' },
-  { id: 'thought_eater', name: 'Thought Eater',  tier: 4, hp: 115, power: 21, xp: 128, gold: 45,  sprite: '🧠', element: 'arcane',   taunt: 'You forget why you came here.' },
-  { id: 'reality_tear',  name: 'Reality Tear',   tier: 5, hp: 260, power: 28, xp: 290, gold: 120, sprite: '🌀', element: 'arcane',   taunt: 'Where it stands, the floor isn\'t.' },
-  { id: 'paradox',       name: 'Paradox',        tier: 5, hp: 230, power: 32, xp: 300, gold: 125, sprite: '♾️', element: 'arcane',   taunt: 'It both is and is not here.' },
-  { id: 'architect',     name: 'The Architect',  tier: 5, hp: 320, power: 30, xp: 380, gold: 160, sprite: '👁‍🗨', element: 'arcane', taunt: '"I drew these walls. I can erase them."' },
 ];
 
 const monsterById = (id) => MONSTERS.find(m => m.id === id);

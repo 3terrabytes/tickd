@@ -1,147 +1,101 @@
-// Cards available in the dungeon mini-game.
+// Attacks available in the dungeon mini-game.
+// Each attack belongs to a `weaponClass`. The player can only equip attacks
+// whose weaponClass matches their currently equipped weapon's class (with
+// 'any' being usable by everyone).
 //
-// Each card belongs to a `weaponClass`. The player's starter deck is built
-// from cards matching their equipped weapon's class (plus universal cards).
-// 'any' cards are usable by everyone.
+// power      = base damage. Final dmg = power + equipped magic
+// cooldown   = turns until reusable (0 = always available)
+// element    = used for animation tint + future resistance system
+// animation  = key the frontend uses to play the right effect
 //
-// Card fields:
-//   energyCost  — energy required to play (most cards = 1; expensive = 2-3)
-//   power       — direct damage dealt to monster (0 for pure utility)
-//   block       — block granted to player (absorbs next hit before HP)
-//   cardType    — 'attack' (deals dmg) | 'skill' (utility, block, heal, etc.)
-//   pool        — 'starter' (in starter deck), 'common' / 'uncommon' / 'rare' (reward only)
-//   tag         — special effect: 'heal' | 'burn' | 'poison' | 'stun' | 'lifesteal'
-//   heal        — HP restored (for tag='heal')
-//   cooldown    — kept for backwards-compat; no longer used in card combat
-//   element     — used for animation tint
-//   animation   — frontend animation key
-//   emoji       — display icon
-//
-// Heads-up: existing item.weaponClass is derived from the equipped weapon
-// item's id prefix in items.js (sword_*, staff_*, etc.) so changing card
-// ids here would break the link.
+// kept deliberately ASCII-only in identifiers so we can url-encode safely.
 
-const CARDS = [
-  // ── UNIVERSAL STARTERS ─────────────────────────────────────────────────
-  { id: 'strike',        name: 'Strike',         weaponClass: 'any',    energyCost: 1, power: 6,  block: 0, cardType: 'attack', pool: 'starter', animation: 'dash',  emoji: '👊', desc: 'Deal 6 damage.' },
-  { id: 'defend',        name: 'Defend',         weaponClass: 'any',    energyCost: 1, power: 0,  block: 5, cardType: 'skill',  pool: 'starter', animation: 'guard', emoji: '🛡️', desc: 'Gain 5 block.' },
+const ATTACKS = [
+  // ── universal (any weapon) ───────────────────────────────────────────
+  { id: 'punch',         name: 'Punch',          weaponClass: 'any',    power: 8,  cooldown: 0, element: 'physical', animation: 'dash',    emoji: '👊', desc: 'A no-nonsense fist to the face.' },
+  { id: 'kick',          name: 'Roundhouse',     weaponClass: 'any',    power: 12, cooldown: 1, element: 'physical', animation: 'spin',    emoji: '🦵', desc: 'High-impact kick. Brief recovery after.' },
+  { id: 'guard',         name: 'Guard',          weaponClass: 'any',    power: 0,  cooldown: 0, element: 'physical', animation: 'guard',   emoji: '🛡️', desc: 'Reduce incoming damage by 60% this turn.', tag: 'defend' },
+  { id: 'rally',         name: 'Rally',          weaponClass: 'any',    power: 0,  cooldown: 4, element: 'holy',     animation: 'heal',    emoji: '💖', desc: 'Restore 25 HP.', tag: 'heal', heal: 25 },
 
-  // ── UNIVERSAL (any weapon) — reward pool ───────────────────────────────
-  { id: 'punch',         name: 'Bash',           weaponClass: 'any',    energyCost: 1, power: 8,  block: 0, cardType: 'attack', pool: 'common',   cooldown: 0, element: 'physical', animation: 'dash',    emoji: '💢', desc: 'Deal 8 damage.' },
-  { id: 'kick',          name: 'Roundhouse',     weaponClass: 'any',    energyCost: 2, power: 14, block: 0, cardType: 'attack', pool: 'common',   cooldown: 0, element: 'physical', animation: 'spin',    emoji: '🦵', desc: 'Deal 14 damage.' },
-  { id: 'guard',         name: 'Iron Wave',      weaponClass: 'any',    energyCost: 1, power: 4,  block: 4, cardType: 'attack', pool: 'common',   cooldown: 0, element: 'physical', animation: 'guard',   emoji: '🌊', desc: 'Deal 4 damage. Gain 4 block.' },
-  { id: 'rally',         name: 'Rally',          weaponClass: 'any',    energyCost: 2, power: 0,  block: 0, cardType: 'skill',  pool: 'uncommon', cooldown: 0, element: 'holy',     animation: 'heal',    emoji: '💖', desc: 'Restore 25 HP.', tag: 'heal', heal: 25 },
-  { id: 'pommel_strike', name: 'Pommel Strike',  weaponClass: 'any',    energyCost: 1, power: 9,  block: 0, cardType: 'attack', pool: 'uncommon', cooldown: 0, element: 'physical', animation: 'dash',    emoji: '🔨', desc: 'Deal 9 damage. Draw 1 card.', tag: 'draw' },
-  { id: 'survivor',      name: 'Survivor',       weaponClass: 'any',    energyCost: 1, power: 0,  block: 8, cardType: 'skill',  pool: 'uncommon', element: 'physical', animation: 'guard',  emoji: '🦴', desc: 'Gain 8 block.' },
-  { id: 'second_wind',   name: 'Second Wind',    weaponClass: 'any',    energyCost: 1, power: 0,  block: 0, cardType: 'skill',  pool: 'rare',     element: 'holy',     animation: 'heal',    emoji: '🍃', desc: 'Restore 50 HP.', tag: 'heal', heal: 50 },
+  // ── sword ─────────────────────────────────────────────────────────────
+  { id: 'slash',         name: 'Slash',          weaponClass: 'sword',  power: 14, cooldown: 0, element: 'physical', animation: 'slash',   emoji: '⚔️', desc: 'A clean, fast cut.' },
+  { id: 'heavy_slash',   name: 'Heavy Slash',    weaponClass: 'sword',  power: 26, cooldown: 2, element: 'physical', animation: 'heavy',   emoji: '🗡️', desc: 'A wide, punishing swing.' },
+  { id: 'riposte',       name: 'Riposte',        weaponClass: 'sword',  power: 18, cooldown: 1, element: 'physical', animation: 'parry',   emoji: '✨', desc: 'Counter-strike on the back foot.' },
+  { id: 'whirlwind',     name: 'Whirlwind',      weaponClass: 'sword',  power: 22, cooldown: 3, element: 'physical', animation: 'spin',    emoji: '🌪️', desc: 'Spin attack — hits hard but leaves you open.' },
 
-  // ── SWORD ──────────────────────────────────────────────────────────────
-  { id: 'slash',         name: 'Slash',          weaponClass: 'sword',  energyCost: 1, power: 12, block: 0, cardType: 'attack', pool: 'starter',  cooldown: 0, element: 'physical', animation: 'slash',   emoji: '⚔️', desc: 'Deal 12 damage.' },
-  { id: 'heavy_slash',   name: 'Heavy Slash',    weaponClass: 'sword',  energyCost: 2, power: 22, block: 0, cardType: 'attack', pool: 'common',   cooldown: 0, element: 'physical', animation: 'heavy',   emoji: '🗡️', desc: 'Deal 22 damage.' },
-  { id: 'riposte',       name: 'Riposte',        weaponClass: 'sword',  energyCost: 1, power: 12, block: 4, cardType: 'attack', pool: 'uncommon', cooldown: 0, element: 'physical', animation: 'parry',   emoji: '✨', desc: 'Deal 12 dmg. Gain 4 block.' },
-  { id: 'whirlwind',     name: 'Whirlwind',      weaponClass: 'sword',  energyCost: 2, power: 18, block: 0, cardType: 'attack', pool: 'rare',     cooldown: 0, element: 'physical', animation: 'spin',    emoji: '🌪️', desc: 'Deal 18 damage.' },
+  // ── staff ─────────────────────────────────────────────────────────────
+  { id: 'magic_missile', name: 'Magic Missile',  weaponClass: 'staff',  power: 16, cooldown: 0, element: 'arcane',   animation: 'missile', emoji: '✨', desc: 'Arcane projectile. Never misses.' },
+  { id: 'fireball',      name: 'Fireball',       weaponClass: 'staff',  power: 24, cooldown: 2, element: 'fire',     animation: 'fire',    emoji: '🔥', desc: 'A roaring sphere of flame. Applies BURN.', tag: 'burn' },
+  { id: 'frost_nova',    name: 'Frost Nova',     weaponClass: 'staff',  power: 20, cooldown: 2, element: 'ice',      animation: 'frost',   emoji: '❄️', desc: 'A shockwave of cold.' },
+  { id: 'mend',          name: 'Mend',           weaponClass: 'staff',  power: 0,  cooldown: 3, element: 'holy',     animation: 'heal',    emoji: '💚', desc: 'Restore 40 HP.', tag: 'heal', heal: 40 },
 
-  // ── STAFF ──────────────────────────────────────────────────────────────
-  { id: 'magic_missile', name: 'Magic Missile',  weaponClass: 'staff',  energyCost: 1, power: 9,  block: 0, cardType: 'attack', pool: 'starter',  cooldown: 0, element: 'arcane',   animation: 'missile', emoji: '✨', desc: 'Deal 9 damage.' },
-  { id: 'fireball',      name: 'Fireball',       weaponClass: 'staff',  energyCost: 2, power: 16, block: 0, cardType: 'attack', pool: 'uncommon', cooldown: 0, element: 'fire',     animation: 'fire',    emoji: '🔥', desc: 'Deal 16 dmg. Apply BURN.', tag: 'burn' },
-  { id: 'frost_nova',    name: 'Frost Nova',     weaponClass: 'staff',  energyCost: 2, power: 14, block: 0, cardType: 'skill',  pool: 'uncommon', cooldown: 0, element: 'ice',      animation: 'frost',   emoji: '❄️', desc: 'Deal 14 damage.' },
-  { id: 'mend',          name: 'Mend',           weaponClass: 'staff',  energyCost: 1, power: 0,  block: 0, cardType: 'skill',  pool: 'common',   cooldown: 0, element: 'holy',     animation: 'heal',    emoji: '💚', desc: 'Restore 30 HP.', tag: 'heal', heal: 30 },
+  // ── bow ───────────────────────────────────────────────────────────────
+  { id: 'quick_shot',    name: 'Quick Shot',     weaponClass: 'bow',    power: 13, cooldown: 0, element: 'physical', animation: 'arrow',   emoji: '🏹', desc: 'A swift, low-commitment arrow.' },
+  { id: 'aimed_shot',    name: 'Aimed Shot',     weaponClass: 'bow',    power: 30, cooldown: 3, element: 'physical', animation: 'arrow',   emoji: '🎯', desc: 'Slow draw, devastating hit.' },
+  { id: 'volley',        name: 'Volley',         weaponClass: 'bow',    power: 22, cooldown: 2, element: 'physical', animation: 'volley',  emoji: '🌧️', desc: 'A rain of arrows.' },
+  { id: 'storm_shot',    name: 'Storm Shot',     weaponClass: 'bow',    power: 22, cooldown: 2, element: 'lightning',animation: 'lightning',emoji: '⚡', desc: 'Crackling lightning. Chance to STUN.', tag: 'stun' },
 
-  // ── BOW ────────────────────────────────────────────────────────────────
-  { id: 'quick_shot',    name: 'Quick Shot',     weaponClass: 'bow',    energyCost: 1, power: 10, block: 0, cardType: 'attack', pool: 'starter',  cooldown: 0, element: 'physical', animation: 'arrow',   emoji: '🏹', desc: 'Deal 10 damage.' },
-  { id: 'aimed_shot',    name: 'Aimed Shot',     weaponClass: 'bow',    energyCost: 2, power: 22, block: 0, cardType: 'attack', pool: 'uncommon', cooldown: 0, element: 'physical', animation: 'arrow',   emoji: '🎯', desc: 'Deal 22 damage.' },
-  { id: 'volley',        name: 'Volley',         weaponClass: 'bow',    energyCost: 2, power: 16, block: 0, cardType: 'attack', pool: 'common',   cooldown: 0, element: 'physical', animation: 'volley',  emoji: '🌧️', desc: 'Deal 16 damage.' },
-  { id: 'storm_shot',    name: 'Storm Shot',     weaponClass: 'bow',    energyCost: 2, power: 18, block: 0, cardType: 'attack', pool: 'rare',     cooldown: 0, element: 'lightning',animation: 'lightning',emoji: '⚡', desc: 'Deal 18 dmg. STUN.', tag: 'stun' },
+  // ── axe ───────────────────────────────────────────────────────────────
+  { id: 'cleave',        name: 'Cleave',         weaponClass: 'axe',    power: 18, cooldown: 0, element: 'physical', animation: 'slash',   emoji: '🪓', desc: 'A brutal downward chop.' },
+  { id: 'rend',          name: 'Rend',           weaponClass: 'axe',    power: 24, cooldown: 2, element: 'physical', animation: 'heavy',   emoji: '🩸', desc: 'Tears flesh and armor alike.' },
+  { id: 'execute',       name: 'Execute',        weaponClass: 'axe',    power: 36, cooldown: 4, element: 'physical', animation: 'heavy',   emoji: '💀', desc: 'A finisher. Wide swing, huge damage.' },
 
-  // ── AXE ────────────────────────────────────────────────────────────────
-  { id: 'cleave',        name: 'Cleave',         weaponClass: 'axe',    energyCost: 1, power: 14, block: 0, cardType: 'attack', pool: 'starter',  cooldown: 0, element: 'physical', animation: 'slash',   emoji: '🪓', desc: 'Deal 14 damage.' },
-  { id: 'rend',          name: 'Rend',           weaponClass: 'axe',    energyCost: 2, power: 20, block: 0, cardType: 'attack', pool: 'uncommon', cooldown: 0, element: 'physical', animation: 'heavy',   emoji: '🩸', desc: 'Deal 20 damage.' },
-  { id: 'execute',       name: 'Execute',        weaponClass: 'axe',    energyCost: 3, power: 32, block: 0, cardType: 'attack', pool: 'rare',     cooldown: 0, element: 'physical', animation: 'heavy',   emoji: '💀', desc: 'Deal 32 damage.' },
+  // ── dagger ────────────────────────────────────────────────────────────
+  { id: 'stab',          name: 'Stab',           weaponClass: 'dagger', power: 12, cooldown: 0, element: 'physical', animation: 'dash',    emoji: '🗡️', desc: 'A quick, precise jab.' },
+  { id: 'backstab',      name: 'Backstab',       weaponClass: 'dagger', power: 28, cooldown: 3, element: 'physical', animation: 'dash',    emoji: '🌑', desc: 'Strike from the shadows.' },
+  { id: 'poison_dart',   name: 'Poison Dart',    weaponClass: 'dagger', power: 14, cooldown: 1, element: 'poison',   animation: 'poison',  emoji: '☠️', desc: 'Venomous. Applies POISON for 3 turns.', tag: 'poison' },
 
-  // ── DAGGER ─────────────────────────────────────────────────────────────
-  { id: 'stab',          name: 'Stab',           weaponClass: 'dagger', energyCost: 1, power: 10, block: 0, cardType: 'attack', pool: 'starter',  cooldown: 0, element: 'physical', animation: 'dash',    emoji: '🗡️', desc: 'Deal 10 damage.' },
-  { id: 'backstab',      name: 'Backstab',       weaponClass: 'dagger', energyCost: 2, power: 24, block: 0, cardType: 'attack', pool: 'rare',     cooldown: 0, element: 'physical', animation: 'dash',    emoji: '🌑', desc: 'Deal 24 damage.' },
-  { id: 'poison_dart',   name: 'Poison Dart',    weaponClass: 'dagger', energyCost: 1, power: 8,  block: 0, cardType: 'attack', pool: 'common',   cooldown: 0, element: 'poison',   animation: 'poison',  emoji: '☠️', desc: 'Deal 8 dmg. Apply POISON.', tag: 'poison' },
+  // ── hammer ────────────────────────────────────────────────────────────
+  { id: 'smash',         name: 'Smash',          weaponClass: 'hammer', power: 20, cooldown: 0, element: 'physical', animation: 'heavy',   emoji: '🔨', desc: 'Crushing overhead blow.' },
+  { id: 'shockwave',     name: 'Shockwave',      weaponClass: 'hammer', power: 26, cooldown: 2, element: 'lightning',animation: 'shockwave',emoji: '💥', desc: 'Ground-shaking impact.' },
+  { id: 'thunderclap',   name: 'Thunderclap',    weaponClass: 'hammer', power: 28, cooldown: 3, element: 'lightning',animation: 'lightning',emoji: '⚡', desc: 'Storm-fueled finisher. STUNS the target.', tag: 'stun' },
 
-  // ── HAMMER ─────────────────────────────────────────────────────────────
-  { id: 'smash',         name: 'Smash',          weaponClass: 'hammer', energyCost: 1, power: 12, block: 0, cardType: 'attack', pool: 'starter',  cooldown: 0, element: 'physical', animation: 'heavy',   emoji: '🔨', desc: 'Deal 12 damage.' },
-  { id: 'shockwave',     name: 'Shockwave',      weaponClass: 'hammer', energyCost: 2, power: 20, block: 0, cardType: 'attack', pool: 'uncommon', cooldown: 0, element: 'lightning',animation: 'shockwave',emoji: '💥', desc: 'Deal 20 damage.' },
-  { id: 'thunderclap',   name: 'Thunderclap',    weaponClass: 'hammer', energyCost: 3, power: 24, block: 0, cardType: 'attack', pool: 'rare',     cooldown: 0, element: 'lightning',animation: 'lightning',emoji: '⚡', desc: 'Deal 24 dmg. STUN.', tag: 'stun' },
+  // ── wand ──────────────────────────────────────────────────────────────
+  { id: 'bolt',          name: 'Arcane Bolt',    weaponClass: 'wand',   power: 14, cooldown: 0, element: 'arcane',   animation: 'missile', emoji: '✨', desc: 'A focused beam of magic.' },
+  { id: 'hex',           name: 'Hex',            weaponClass: 'wand',   power: 18, cooldown: 2, element: 'shadow',   animation: 'shadow',  emoji: '🌀', desc: 'Curses the target.' },
+  { id: 'chaos_blast',   name: 'Chaos Blast',    weaponClass: 'wand',   power: 30, cooldown: 3, element: 'arcane',   animation: 'fire',    emoji: '💫', desc: 'Reality bends around the impact.' },
 
-  // ── WAND ───────────────────────────────────────────────────────────────
-  { id: 'bolt',          name: 'Arcane Bolt',    weaponClass: 'wand',   energyCost: 1, power: 11, block: 0, cardType: 'attack', pool: 'starter',  cooldown: 0, element: 'arcane',   animation: 'missile', emoji: '✨', desc: 'Deal 11 damage.' },
-  { id: 'hex',           name: 'Hex',            weaponClass: 'wand',   energyCost: 1, power: 14, block: 0, cardType: 'attack', pool: 'uncommon', cooldown: 0, element: 'shadow',   animation: 'shadow',  emoji: '🌀', desc: 'Deal 14 damage.' },
-  { id: 'chaos_blast',   name: 'Chaos Blast',    weaponClass: 'wand',   energyCost: 2, power: 22, block: 0, cardType: 'attack', pool: 'rare',     cooldown: 0, element: 'arcane',   animation: 'fire',    emoji: '💫', desc: 'Deal 22 damage.' },
+  // ── lance ─────────────────────────────────────────────────────────────
+  { id: 'pierce',        name: 'Pierce',         weaponClass: 'lance',  power: 18, cooldown: 0, element: 'physical', animation: 'dash',    emoji: '🔱', desc: 'Drive the point home.' },
+  { id: 'charge',        name: 'Charge',         weaponClass: 'lance',  power: 30, cooldown: 3, element: 'physical', animation: 'dash',    emoji: '🐎', desc: 'Full-tilt running attack.' },
+  { id: 'celestial',     name: 'Celestial Bolt', weaponClass: 'lance',  power: 28, cooldown: 2, element: 'holy',     animation: 'lightning',emoji: '☄️', desc: 'Thrown like a falling star.' },
 
-  // ── LANCE ──────────────────────────────────────────────────────────────
-  { id: 'pierce',        name: 'Pierce',         weaponClass: 'lance',  energyCost: 1, power: 14, block: 0, cardType: 'attack', pool: 'starter',  cooldown: 0, element: 'physical', animation: 'dash',    emoji: '🔱', desc: 'Deal 14 damage.' },
-  { id: 'charge',        name: 'Charge',         weaponClass: 'lance',  energyCost: 2, power: 24, block: 0, cardType: 'attack', pool: 'rare',     cooldown: 0, element: 'physical', animation: 'dash',    emoji: '🐎', desc: 'Deal 24 damage.' },
-  { id: 'celestial',     name: 'Celestial Bolt', weaponClass: 'lance',  energyCost: 2, power: 20, block: 0, cardType: 'attack', pool: 'uncommon', cooldown: 0, element: 'holy',     animation: 'lightning',emoji: '☄️', desc: 'Deal 20 damage.' },
-
-  // ── SCYTHE ─────────────────────────────────────────────────────────────
-  { id: 'reap',          name: 'Reap',           weaponClass: 'scythe', energyCost: 1, power: 16, block: 0, cardType: 'attack', pool: 'starter',  cooldown: 0, element: 'shadow',   animation: 'slash',   emoji: '💀', desc: 'Deal 16 damage.' },
-  { id: 'soul_drain',    name: 'Soul Drain',     weaponClass: 'scythe', energyCost: 2, power: 14, block: 0, cardType: 'attack', pool: 'uncommon', cooldown: 0, element: 'shadow',   animation: 'shadow',  emoji: '👻', desc: 'Deal 14 dmg. Heal half.', tag: 'lifesteal' },
-  { id: 'death_blossom', name: "Death's Blossom",weaponClass: 'scythe', energyCost: 3, power: 28, block: 0, cardType: 'attack', pool: 'rare',     cooldown: 0, element: 'shadow',   animation: 'shadow',  emoji: '🌑', desc: 'Deal 28 damage.' },
+  // ── scythe ────────────────────────────────────────────────────────────
+  { id: 'reap',          name: 'Reap',           weaponClass: 'scythe', power: 22, cooldown: 0, element: 'shadow',   animation: 'slash',   emoji: '💀', desc: 'A wide harvesting arc.' },
+  { id: 'soul_drain',    name: 'Soul Drain',     weaponClass: 'scythe', power: 18, cooldown: 2, element: 'shadow',   animation: 'shadow',  emoji: '👻', desc: 'Heal for half the damage dealt.', tag: 'lifesteal' },
+  { id: 'death_blossom', name: "Death's Blossom",weaponClass: 'scythe', power: 32, cooldown: 4, element: 'shadow',   animation: 'shadow',  emoji: '🌑', desc: 'The harvest comes for all.' },
 ];
 
 // Lookup by id
-const cardById = (id) => CARDS.find(c => c.id === id);
-// Backwards-compat alias (existing imports use attackById)
-const attackById = cardById;
+const attackById = (id) => ATTACKS.find(a => a.id === id);
 
-// All cards usable as starter / reward for a given weapon class.
-const cardsForClass = (weaponClass) => {
-  if (!weaponClass) return CARDS.filter(c => c.weaponClass === 'any');
-  return CARDS.filter(c => c.weaponClass === 'any' || c.weaponClass === weaponClass);
+// Attacks usable with a given weapon class (always includes 'any' attacks).
+const attacksForClass = (weaponClass) => {
+  if (!weaponClass) return ATTACKS.filter(a => a.weaponClass === 'any');
+  return ATTACKS.filter(a => a.weaponClass === 'any' || a.weaponClass === weaponClass);
 };
-const attacksForClass = cardsForClass; // alias
 
-// Build the starter deck for a given weapon class: 5 Strike + 4 Defend + 1
-// signature card from the class (or another Strike if classless).
-const starterDeck = (weaponClass) => {
-  const deck = [];
-  for (let i = 0; i < 5; i++) deck.push('strike');
-  for (let i = 0; i < 4; i++) deck.push('defend');
-  if (weaponClass) {
-    const classStarter = CARDS.find(c => c.weaponClass === weaponClass && c.pool === 'starter');
-    deck.push(classStarter ? classStarter.id : 'strike');
-  } else {
-    deck.push('strike');
+// The four attacks new players start with — usable regardless of gear.
+const DEFAULT_LOADOUT = ['punch', 'kick', 'guard', 'rally'];
+
+// Build a sensible default loadout for a given weapon class. When the user
+// equips a weapon (e.g. a sword), they should immediately get the signature
+// moves for that class plus a Rally (heal) slot, so the weapon swap feels
+// meaningful instead of all four slots staying as Punch/Kick.
+const defaultLoadoutFor = (weaponClass) => {
+  if (!weaponClass) return DEFAULT_LOADOUT;
+  const classMoves = ATTACKS
+    .filter(a => a.weaponClass === weaponClass)
+    .sort((a, b) => (a.cooldown || 0) - (b.cooldown || 0))
+    .slice(0, 3)
+    .map(a => a.id);
+  // If somehow a class has fewer than 3 moves, fall back to universal fillers.
+  while (classMoves.length < 3) {
+    const filler = DEFAULT_LOADOUT[classMoves.length];
+    if (filler && !classMoves.includes(filler)) classMoves.push(filler);
+    else break;
   }
-  return deck;
+  return [...classMoves, 'rally'];
 };
 
-// Reward-card pool: cards eligible to drop after combat, weighted by depth.
-// Higher tier monsters drop better cards.
-const rewardPool = (weaponClass, monsterTier) => {
-  const all = cardsForClass(weaponClass).filter(c => c.pool !== 'starter');
-  if (!monsterTier) return all;
-  // Tier 1-2: commons. Tier 3: uncommons. Tier 4+: rare.
-  if (monsterTier <= 2) return all.filter(c => c.pool === 'common');
-  if (monsterTier <= 3) return all.filter(c => c.pool === 'common' || c.pool === 'uncommon');
-  return all.filter(c => c.pool !== 'starter');
-};
-
-// Pick N distinct random cards from a pool.
-const pickRewardCards = (pool, count = 3) => {
-  if (!pool.length) return [];
-  const shuffled = [...pool];
-  for (let i = shuffled.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-  }
-  return shuffled.slice(0, Math.min(count, shuffled.length));
-};
-
-// Kept exports for legacy callers
-const ATTACKS = CARDS;
-const DEFAULT_LOADOUT = ['strike', 'strike', 'defend', 'defend'];
-const defaultLoadoutFor = (weaponClass) => starterDeck(weaponClass).slice(0, 4);
-
-module.exports = {
-  CARDS, ATTACKS,
-  cardById, attackById,
-  cardsForClass, attacksForClass,
-  starterDeck, rewardPool, pickRewardCards,
-  DEFAULT_LOADOUT, defaultLoadoutFor,
-};
+module.exports = { ATTACKS, attackById, attacksForClass, DEFAULT_LOADOUT, defaultLoadoutFor };

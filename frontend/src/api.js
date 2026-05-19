@@ -101,21 +101,12 @@ export const api = {
   dungeon: {
     loadout: () => req('GET', '/dungeon/loadout'),
     saveLoadout: (slots) => req('POST', '/dungeon/loadout', { slots }),
-    startRun: (opts = {}) => req('POST', '/dungeon/run', opts),
+    startRun: () => req('POST', '/dungeon/run'),
     reward: (monsterId) => req('POST', '/dungeon/reward', { monsterId }),
-    rewardCards: (tier) => req('GET', `/dungeon/reward-cards/${tier}`),
     treasure: (tier) => req('POST', '/dungeon/treasure', { tier }),
     buyPotion: (potionId) => req('POST', `/dungeon/buy-potion/${potionId}`),
     attacks: () => req('GET', '/dungeon/attacks'),
     monsters: () => req('GET', '/dungeon/monsters'),
     potions: () => req('GET', '/dungeon/potions'),
-    biomes: () => req('GET', '/dungeon/biomes'),
-    relics: () => req('GET', '/dungeon/relics'),
-    events: () => req('GET', '/dungeon/events'),
-    pickRelic: (rarity) => req('POST', '/dungeon/pick-relic', { rarity }),
-  },
-  duels: {
-    challenge: (friendId) => req('POST', `/duels/challenge/${friendId}`),
-    history: () => req('GET', '/duels/history'),
   },
 };

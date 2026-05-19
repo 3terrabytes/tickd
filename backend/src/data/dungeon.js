@@ -11,8 +11,6 @@
 // orphaned and unreachable.
 
 const { MONSTERS } = require('./monsters');
-const { BIOMES, biomeById } = require('./biomes');
-const { pickEvent } = require('./events');
 
 const COLS = 4;
 const FLOORS_COUNT = 7;
@@ -22,10 +20,10 @@ const FLOORS_COUNT = 7;
 // single centre node.
 const FLOOR_PLAN = [
   { count: 1, types: ['start'] },
-  { count: 3, types: ['battle', 'battle', 'event'] },
-  { count: 3, types: ['battle', 'event', 'treasure'] },
+  { count: 3, types: ['battle', 'battle', 'battle'] },
+  { count: 3, types: ['battle', 'battle', 'treasure'] },
   { count: 4, types: ['battle', 'shop', 'battle', 'rest'] },
-  { count: 3, types: ['elite', 'event', 'treasure'] },
+  { count: 3, types: ['elite', 'battle', 'treasure'] },
   { count: 3, types: ['rest', 'elite', 'shop'] },
   { count: 1, types: ['boss'] },
 ];
@@ -51,31 +49,15 @@ function shuffle(arr) {
   return out;
 }
 
-// Pick a monster id matching the requested tier — scoped to the biome's pool
-// if one is provided. Falls back to global pool if biome has no match.
-function pickMonster(tier, biome) {
-  let pool;
-  if (biome) {
-    const allowed = new Set(biome.monsterPool);
-    pool = MONSTERS.filter(m => m.tier === tier && allowed.has(m.id));
-    if (!pool.length) pool = MONSTERS.filter(m => m.tier === tier);
-  } else {
-    pool = MONSTERS.filter(m => m.tier === tier);
-  }
+// Pick a monster id matching the requested tier.
+function pickMonster(tier) {
+  const pool = MONSTERS.filter(m => m.tier === tier);
   if (!pool.length) return null;
   return pool[Math.floor(Math.random() * pool.length)].id;
 }
 
-function pickBoss(biome) {
-  if (biome && biome.bossPool && biome.bossPool.length) {
-    return biome.bossPool[Math.floor(Math.random() * biome.bossPool.length)];
-  }
-  return pickMonster(5);
-}
-
 // Build the full map for one dungeon run.
-function generateMap(biomeId) {
-  const biome = biomeId ? biomeById(biomeId) : null;
+function generateMap() {
   let nextId = 0;
   const nodes = [];
   const nodesByFloor = [];
@@ -96,17 +78,13 @@ function generateMap(biomeId) {
       const node = { id: nextId++, floor: f, col: cols[i], type };
       // Combat nodes need a monster picked at generation time so the player
       // sees the right enemy icon on the map preview.
-      if (type === 'battle' || type === 'elite') {
-        const tier = type === 'elite' ? 4
+      if (type === 'battle' || type === 'elite' || type === 'boss') {
+        const tier = type === 'boss'  ? 5
+                   : type === 'elite' ? 4
                    : f <= 1           ? 1
                    : f <= 3           ? 2
                    :                    3;
-        node.monsterId = pickMonster(tier, biome);
-      } else if (type === 'boss') {
-        node.monsterId = pickBoss(biome);
-      } else if (type === 'event') {
-        const ev = pickEvent();
-        node.event = ev;
+        node.monsterId = pickMonster(tier);
       }
       floorNodes.push(node);
       nodes.push(node);
