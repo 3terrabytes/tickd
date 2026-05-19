@@ -4,30 +4,27 @@ import { useAuth } from '../context/AuthContext';
 import PixelCharacter from '../components/PixelCharacter';
 
 // ── Tuning constants ──────────────────────────────────────────────────
-// Player max HP scales with level: 100 + 20 per level. Damage subtracts from
-// this in-battle value only; we never decrement real XP server-side on hit.
+// Player max HP scales with level: 100 + 20 per level.
 const playerMaxHp = (level) => 100 + 20 * (level || 1);
 
 // Player attack damage = base power + magic, with light random variance.
-const rollDamage = (attack, magic) => {
+const rollDamage = (attack, magic, multiplier = 1) => {
   const base = (attack.power || 0) + (magic || 0) * 0.5;
-  if (!base) return 0;
-  const variance = 0.85 + Math.random() * 0.3; // 0.85x to 1.15x
+  if (!base) return { dmg: 0, crit: false };
+  const variance = 0.85 + Math.random() * 0.3;
   const crit = Math.random() < 0.12;
-  return { dmg: Math.round(base * variance * (crit ? 2 : 1)), crit };
+  return { dmg: Math.round(base * variance * (crit ? 2 : 1) * multiplier), crit };
 };
 
-// Monster picks a basic hit; uses its power + small variance.
-const monsterDamage = (monster, armor) => {
+const monsterDamage = (monster, armor, defenseMult = 1) => {
   const variance = 0.9 + Math.random() * 0.2;
   const raw = (monster.power || 0) * variance;
-  const mitigated = Math.max(1, raw - armor * 0.4);
+  const mitigated = Math.max(1, (raw - armor * 0.4) * defenseMult);
   return Math.round(mitigated);
 };
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
-// Animation class lookups
 const PLAYER_ANIM = {
   dash: 'battle-player-dash',
   slash: 'battle-player-dash',
@@ -47,7 +44,6 @@ const PLAYER_ANIM = {
   heal: 'battle-player-heal',
 };
 
-// Optional projectile emoji that flies across the battle field.
 const PROJECTILE = {
   missile: { emoji: '✨', color: '#a78bfa' },
   fire:    { emoji: '🔥', color: '#fb923c' },
@@ -60,54 +56,162 @@ const PROJECTILE = {
   shockwave:{ emoji: '💥', color: '#fcd34d' },
 };
 
+// Map node visuals
+const NODE_META = {
+  start:    { icon: '🚪', label: 'Start',     color: '#94a3b8' },
+  battle:   { icon: '⚔️', label: 'Battle',    color: '#ef4444' },
+  elite:    { icon: '🔥', label: 'Elite',     color: '#fb923c' },
+  shop:     { icon: '🛒', label: 'Shop',      color: '#22c55e' },
+  rest:     { icon: '⛲', label: 'Rest Site', color: '#60a5fa' },
+  treasure: { icon: '💎', label: 'Treasure',  color: '#fbbf24' },
+  boss:     { icon: '👑', label: 'BOSS',      color: '#fde047' },
+};
+
 export default function DungeonPage() {
   const { user, refreshUser } = useAuth();
-  const [loadout, setLoadout] = useState(null);  // { slots, slotDetails, available, weaponClass, magic, armor }
+  const [loadout, setLoadout] = useState(null);
   const [inventory, setInventory] = useState({ equipped: {} });
-  const [run, setRun] = useState(null);          // { rooms: [monster, ...], currentIndex }
+
+  // Run state
+  const [map, setMap] = useState(null);          // { nodes, edges }
+  const [phase, setPhase] = useState('idle');    // idle | map | battle | shop | rest | treasure | rewarded | dead | cleared
+  const [position, setPosition] = useState(null);// last cleared node id
+  const [cleared, setCleared] = useState(new Set());
+  const [activeNode, setActiveNode] = useState(null);
   const [hp, setHp] = useState(0);
   const [maxHp, setMaxHp] = useState(0);
+
+  // Battle state
   const [monsterHp, setMonsterHp] = useState(0);
-  const [battleState, setBattleState] = useState('idle'); // idle | active | won | lost | rewarded
+  const [cooldowns, setCooldowns] = useState({ 0: 0, 1: 0, 2: 0, 3: 0 });
+  const [guarding, setGuarding] = useState(false);
+  const [strengthBuff, setStrengthBuff] = useState(null); // potion-applied damage mult
+  const [defenseBuff, setDefenseBuff] = useState(null);   // potion-applied defense mult
+  const [luckyCharm, setLuckyCharm] = useState(false);    // bonus gold on next treasure
+
+  // Inventory
+  const [potions, setPotions] = useState([]);    // [{id, name, emoji, ...}, ...]
+  const [shopOffer, setShopOffer] = useState([]); // potions offered in current shop
+  const [shopPotionCatalog, setShopPotionCatalog] = useState([]);
+
+  // Misc
   const [log, setLog] = useState([]);
   const [busy, setBusy] = useState(false);
   const [editingLoadout, setEditingLoadout] = useState(false);
-  const [cooldowns, setCooldowns] = useState({ 0: 0, 1: 0, 2: 0, 3: 0 });
-  const [guarding, setGuarding] = useState(false);
-  const [reward, setReward] = useState(null);
 
   // Visual effect state
   const [playerAnim, setPlayerAnim] = useState('');
   const [monsterAnim, setMonsterAnim] = useState('');
   const [projectile, setProjectile] = useState(null);
-  const [damages, setDamages] = useState([]); // {id, target, value, crit, heal}
-  const [encounter, setEncounter] = useState(null); // monster being introduced
-  const [banner, setBanner] = useState(null);       // big centred banner text
+  const [damages, setDamages] = useState([]);
+  const [encounter, setEncounter] = useState(null);
+  const [banner, setBanner] = useState(null);
   const [stageShake, setStageShake] = useState(false);
-  const [lootDrop, setLootDrop] = useState(null);   // { xp, gold } pop above monster
+  const [lootDrop, setLootDrop] = useState(null);
   const [rewardCount, setRewardCount] = useState({ xp: 0, gold: 0 });
 
-  const addLog = (line) => setLog(l => [...l.slice(-8), line]);
+  const addLog = (line) => setLog(l => [...l.slice(-9), line]);
   const popDamage = (target, value, opts = {}) => {
     const id = Date.now() + Math.random();
     setDamages(d => [...d, { id, target, value, ...opts }]);
     setTimeout(() => setDamages(d => d.filter(x => x.id !== id)), 1100);
   };
-
-  // Centred banner ("FIGHT!" / "VICTORY!" / "DEFEAT") shown for ms milliseconds.
   const flashBanner = (text, color, ms = 900) => {
     setBanner({ text, color });
     setTimeout(() => setBanner(null), ms);
   };
-
-  // Shake the battle stage for big hits / crits / boss attacks.
   const shake = (ms = 450) => {
     setStageShake(true);
     setTimeout(() => setStageShake(false), ms);
   };
+  const countUpReward = (xp, gold) => {
+    const steps = 22, dur = 800;
+    let i = 0;
+    const tick = setInterval(() => {
+      i++;
+      const t = Math.min(1, i / steps);
+      const eased = 1 - Math.pow(1 - t, 3);
+      setRewardCount({ xp: Math.round(xp * eased), gold: Math.round(gold * eased) });
+      if (t >= 1) clearInterval(tick);
+    }, dur / steps);
+  };
 
-  // Pre-battle encounter intro: shows the monster name + taunt sliding in,
-  // then resolves so the battle proper can start.
+  const loadAll = useCallback(async () => {
+    const [lo, inv, pots] = await Promise.all([
+      api.dungeon.loadout(),
+      api.avatar.inventory().catch(() => ({ equipped: {} })),
+      api.dungeon.potions().catch(() => []),
+    ]);
+    setLoadout(lo);
+    setInventory(inv);
+    setShopPotionCatalog(pots);
+  }, []);
+
+  useEffect(() => { loadAll(); }, [loadAll]);
+
+  useEffect(() => {
+    if (user) setMaxHp(playerMaxHp(user.level));
+  }, [user]);
+
+  // ── Run lifecycle ────────────────────────────────────────────────
+  const startRun = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const data = await api.dungeon.startRun();
+      const mx = playerMaxHp(user.level);
+      setMap(data.map);
+      setHp(mx);
+      setMaxHp(mx);
+      setPosition(data.map.nodes.find(n => n.type === 'start').id);
+      setCleared(new Set([data.map.nodes.find(n => n.type === 'start').id]));
+      setPotions([]);
+      setLog([]);
+      setPhase('map');
+      addLog('🚪 You step into the catacombs.');
+    } catch (err) {
+      addLog('⚠ ' + err.message);
+    }
+    setBusy(false);
+  };
+
+  const exitRun = () => {
+    setMap(null);
+    setPhase('idle');
+    setActiveNode(null);
+    setPosition(null);
+    setCleared(new Set());
+    setPotions([]);
+    setShopOffer([]);
+    setStrengthBuff(null);
+    setDefenseBuff(null);
+    setLuckyCharm(false);
+  };
+
+  const enterNode = (node) => {
+    setActiveNode(node);
+    setRewardCount({ xp: 0, gold: 0 });
+    if (node.type === 'battle' || node.type === 'elite' || node.type === 'boss') {
+      enterBattle(node);
+    } else if (node.type === 'shop') {
+      enterShop();
+    } else if (node.type === 'rest') {
+      setPhase('rest');
+      addLog('⛲ You find a quiet spring to rest at.');
+    } else if (node.type === 'treasure') {
+      claimTreasure(node);
+    }
+  };
+
+  const enterBattle = async (node) => {
+    setMonsterHp(node.monster.hp);
+    setCooldowns({ 0: 0, 1: 0, 2: 0, 3: 0 });
+    addLog(`🚪 You enter a chamber.`);
+    setPhase('battle');
+    await showEncounter(node.monster);
+    addLog(`${node.monster.sprite} ${node.monster.name}. ${node.monster.taunt}`);
+  };
+
   const showEncounter = async (monster) => {
     setEncounter(monster);
     await sleep(1400);
@@ -116,108 +220,67 @@ export default function DungeonPage() {
     await sleep(600);
   };
 
-  // Animate the reward XP/gold counters from 0 → final value.
-  const countUpReward = (xp, gold) => {
-    const steps = 22;
-    const dur = 800;
-    let i = 0;
-    const tick = setInterval(() => {
-      i++;
-      const t = Math.min(1, i / steps);
-      // ease-out cubic
-      const eased = 1 - Math.pow(1 - t, 3);
-      setRewardCount({ xp: Math.round(xp * eased), gold: Math.round(gold * eased) });
-      if (t >= 1) clearInterval(tick);
-    }, dur / steps);
+  const enterShop = () => {
+    // Randomly pick 3 of the catalog for this shop.
+    const pool = [...shopPotionCatalog];
+    for (let i = pool.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [pool[i], pool[j]] = [pool[j], pool[i]];
+    }
+    setShopOffer(pool.slice(0, 3));
+    setPhase('shop');
+    addLog('🛒 A wandering merchant beckons you to their stall.');
   };
 
-  const loadLoadout = useCallback(async () => {
-    const [data, inv] = await Promise.all([
-      api.dungeon.loadout(),
-      api.avatar.inventory().catch(() => ({ equipped: {} })),
-    ]);
-    setLoadout(data);
-    setInventory(inv);
-  }, []);
-
-  useEffect(() => { loadLoadout(); }, [loadLoadout]);
-
-  useEffect(() => {
-    if (!user) return;
-    setMaxHp(playerMaxHp(user.level));
-  }, [user]);
-
-  const startRun = async () => {
-    if (busy) return;
-    setBusy(true);
+  const claimTreasure = async (node) => {
+    setPhase('treasure');
     try {
-      const data = await api.dungeon.startRun();
-      const mx = playerMaxHp(user.level);
-      setRun({ rooms: data.rooms, currentIndex: 0 });
-      setHp(mx);
-      setMaxHp(mx);
-      setMonsterHp(data.rooms[0].hp);
-      setCooldowns({ 0: 0, 1: 0, 2: 0, 3: 0 });
-      setLog([]);
-      addLog(`🚪 You step into the dungeon.`);
-      // Show encounter intro before battle starts.
-      await showEncounter(data.rooms[0]);
-      addLog(`${data.rooms[0].sprite} ${data.rooms[0].name} blocks your path. ${data.rooms[0].taunt}`);
-      setBattleState('active');
+      const tier = Math.max(1, Math.floor((node.floor || 1) / 1.5));
+      const res = await api.dungeon.treasure(tier);
+      let gold = res.gold;
+      if (luckyCharm) {
+        gold = Math.round(gold * 1.5);
+        setLuckyCharm(false);
+        addLog(`🍀 Lucky Charm boosts your treasure!`);
+      }
+      countUpReward(0, gold);
+      addLog(`💎 You found ${gold} gold!`);
+      await refreshUser();
     } catch (err) {
       addLog('⚠ ' + err.message);
     }
-    setBusy(false);
   };
 
-  const advanceRoom = async () => {
-    const next = run.currentIndex + 1;
-    if (next >= run.rooms.length) {
+  const completeRoom = () => {
+    if (!activeNode) return;
+    const newCleared = new Set(cleared);
+    newCleared.add(activeNode.id);
+    setCleared(newCleared);
+    setPosition(activeNode.id);
+
+    // Boss = clear the run
+    if (activeNode.type === 'boss') {
       flashBanner('DUNGEON CLEARED', '#fde047', 1600);
-      await sleep(1700);
-      addLog('🏆 You cleared the dungeon!');
-      setRun(null);
-      setBattleState('idle');
+      setPhase('cleared');
       return;
     }
-    const nextMonster = run.rooms[next];
-    setRun({ ...run, currentIndex: next });
-    setMonsterHp(nextMonster.hp);
-    setCooldowns({ 0: 0, 1: 0, 2: 0, 3: 0 });
-    setRewardCount({ xp: 0, gold: 0 });
-    addLog(`🚪 You move to the next room.`);
-    await showEncounter(nextMonster);
-    addLog(`${nextMonster.sprite} ${nextMonster.name}. ${nextMonster.taunt}`);
-    setBattleState('active');
+
+    setActiveNode(null);
+    setPhase('map');
+    setStrengthBuff(null);
+    setDefenseBuff(null);
   };
 
-  const claimReward = async () => {
-    const m = run.rooms[run.currentIndex];
-    try {
-      const res = await api.dungeon.reward(m.id);
-      setReward({ xp: res.xp, gold: res.gold });
-      addLog(`🏆 +${res.xp} XP · +${res.gold} gold`);
-      await refreshUser();
-      setBattleState('rewarded');
-      // Animate the counters from 0 to the real values.
-      setRewardCount({ xp: 0, gold: 0 });
-      countUpReward(res.xp, res.gold);
-    } catch (err) {
-      addLog('⚠ ' + err.message);
-    }
-  };
-
-  // ── Combat ────────────────────────────────────────────────────────
+  // ── Combat ───────────────────────────────────────────────────────
   const useAttack = async (slotIdx) => {
-    if (battleState !== 'active' || busy) return;
+    if (phase !== 'battle' || busy) return;
     if (cooldowns[slotIdx] > 0) return;
     const attack = loadout.slotDetails[slotIdx];
     if (!attack) return;
-    const monster = run.rooms[run.currentIndex];
+    const monster = activeNode.monster;
 
     setBusy(true);
 
-    // ─ Player turn ─
     const anim = PLAYER_ANIM[attack.animation] || 'battle-player-dash';
     setPlayerAnim(anim);
 
@@ -230,11 +293,11 @@ export default function DungeonPage() {
 
     await sleep(350);
 
-    // Healing path
+    let newMonsterHp = monsterHp;
+    let dealt = 0;
     if (attack.tag === 'heal') {
       const heal = attack.heal || 30;
-      const newHp = Math.min(maxHp, hp + heal);
-      setHp(newHp);
+      setHp(prev => Math.min(maxHp, prev + heal));
       popDamage('player', heal, { heal: true });
       addLog(`💚 ${attack.name}: restored ${heal} HP.`);
       setPlayerAnim('');
@@ -244,23 +307,21 @@ export default function DungeonPage() {
       addLog(`🛡 ${attack.name}: bracing for impact.`);
       setPlayerAnim('');
     } else {
-      // Damage path
-      const { dmg, crit } = rollDamage(attack, loadout.magic);
+      const mult = strengthBuff ? strengthBuff : 1;
+      const { dmg, crit } = rollDamage(attack, loadout.magic, mult);
+      dealt = dmg;
       setMonsterAnim('battle-monster-hurt');
       popDamage('monster', dmg, { crit });
-      // Heavy and crit attacks shake the camera.
-      if (crit || attack.animation === 'heavy' || attack.animation === 'shockwave' || attack.animation === 'lightning') {
-        shake();
-      }
-      const newMonsterHp = Math.max(0, monsterHp - dmg);
+      if (crit || ['heavy', 'shockwave', 'lightning'].includes(attack.animation)) shake();
+      newMonsterHp = Math.max(0, monsterHp - dmg);
       setMonsterHp(newMonsterHp);
-      addLog(`${attack.emoji} ${attack.name} hits ${monster.name} for ${dmg}${crit ? ' (CRIT!)' : ''}.`);
+      const buffStr = strengthBuff ? ' [TONIC]' : '';
+      addLog(`${attack.emoji} ${attack.name} hits ${monster.name} for ${dmg}${crit ? ' (CRIT!)' : ''}${buffStr}.`);
+      if (strengthBuff) setStrengthBuff(null);
 
-      // Lifesteal
       if (attack.tag === 'lifesteal') {
         const lifesteal = Math.round(dmg / 2);
-        const newHp = Math.min(maxHp, hp + lifesteal);
-        setHp(newHp);
+        setHp(prev => Math.min(maxHp, prev + lifesteal));
         popDamage('player', lifesteal, { heal: true });
         addLog(`👻 Drained ${lifesteal} HP.`);
       }
@@ -276,48 +337,51 @@ export default function DungeonPage() {
         await sleep(700);
         flashBanner('VICTORY!', '#fde047', 1100);
         await sleep(600);
-        setBattleState('won');
+        // Claim reward
+        try {
+          const res = await api.dungeon.reward(monster.id);
+          countUpReward(res.xp, res.gold);
+          await refreshUser();
+        } catch (err) { addLog('⚠ ' + err.message); }
+        setPhase('rewarded');
         setBusy(false);
         return;
       }
     }
 
-    // Set cooldown
     setCooldowns(c => ({ ...c, [slotIdx]: attack.cooldown || 0 }));
 
-    // ─ Monster turn ─
+    // Monster turn
     await sleep(300);
     setMonsterAnim('battle-monster-attack');
     await sleep(250);
-    let dmg = monsterDamage(monster, loadout.armor);
-    if (guarding) {
-      dmg = Math.round(dmg * 0.4);
-      setGuarding(false);
-    }
+    let dmg = monsterDamage(monster, loadout.armor, defenseBuff || 1);
+    if (guarding) { dmg = Math.round(dmg * 0.4); setGuarding(false); }
+    if (defenseBuff) { setDefenseBuff(null); }
     setPlayerAnim('battle-player-hurt');
     popDamage('player', dmg);
-    const newHp = Math.max(0, hp - (attack.tag === 'heal' ? 0 : dmg) + (attack.tag === 'heal' ? attack.heal || 30 : 0));
-    // We already applied heal above; recompute strictly from current hp - dmg
-    const finalHp = Math.max(0, (attack.tag === 'heal' ? Math.min(maxHp, hp + (attack.heal || 30)) : hp) - dmg);
-    setHp(finalHp);
+    setHp(prev => {
+      const next = Math.max(0, prev - dmg);
+      if (next <= 0) {
+        // Defeat path is handled below by reading hp through state — but
+        // we also schedule the UI swap immediately based on the new value.
+        (async () => {
+          shake(600);
+          flashBanner('DEFEAT', '#fca5a5', 1400);
+          addLog('💀 You fall. The run ends here.');
+          await sleep(900);
+          setPhase('dead');
+          setBusy(false);
+        })();
+      }
+      return next;
+    });
     addLog(`${monster.sprite} ${monster.name} strikes for ${dmg}.`);
     await sleep(500);
     setMonsterAnim('');
     setPlayerAnim('');
-
-    if (finalHp <= 0) {
-      shake(600);
-      flashBanner('DEFEAT', '#fca5a5', 1400);
-      addLog('💀 You fall. No rewards earned.');
-      await sleep(900);
-      setBattleState('lost');
-      setBusy(false);
-      return;
-    }
-    // Monsters always shake a bit on hit — feels weighty.
     if (dmg > 15) shake(350);
 
-    // Tick cooldowns down for all slots
     setCooldowns(c => {
       const out = {};
       for (let i = 0; i < 4; i++) out[i] = Math.max(0, (i === slotIdx ? (attack.cooldown || 0) : (c[i] || 0)) - (i === slotIdx ? 0 : 1));
@@ -327,14 +391,48 @@ export default function DungeonPage() {
     setBusy(false);
   };
 
-  const flee = () => {
-    setRun(null);
-    setBattleState('idle');
-    setReward(null);
-    addLog('You retreat from the dungeon.');
+  // ── Potion use ───────────────────────────────────────────────────
+  const usePotion = (idx) => {
+    const p = potions[idx];
+    if (!p) return;
+    if (p.heal) {
+      setHp(prev => Math.min(maxHp, prev + p.heal));
+      addLog(`🧪 You drink ${p.name}. +${p.heal} HP.`);
+    } else if (p.strength) {
+      setStrengthBuff(p.strength);
+      addLog(`🧉 ${p.name} active — your next attack will hit hard.`);
+    } else if (p.defense) {
+      setDefenseBuff(p.defense);
+      addLog(`📜 ${p.name} active — incoming damage reduced next hit.`);
+    } else if (p.goldBoost) {
+      setLuckyCharm(true);
+      addLog(`🍀 ${p.name} active — your next treasure will pay more.`);
+    }
+    setPotions(prev => prev.filter((_, i) => i !== idx));
   };
 
-  // ── Render ────────────────────────────────────────────────────────
+  const buyPotion = async (potion) => {
+    try {
+      const res = await api.dungeon.buyPotion(potion.id);
+      setPotions(p => [...p, res.potion]);
+      addLog(`🛒 Bought ${potion.name}.`);
+      await refreshUser();
+    } catch (err) { addLog('⚠ ' + err.message); }
+  };
+
+  const restAtSpring = () => {
+    const heal = Math.round(maxHp * 0.4);
+    setHp(prev => Math.min(maxHp, prev + heal));
+    addLog(`⛲ The spring restores ${heal} HP.`);
+    completeRoom();
+  };
+
+  // ── Map helpers ───────────────────────────────────────────────────
+  const nextNodes = position !== null && map
+    ? map.edges.filter(([a]) => a === position).map(([, b]) => map.nodes.find(n => n.id === b)).filter(Boolean)
+    : [];
+
+  // ── Render ───────────────────────────────────────────────────────
   if (!loadout) {
     return <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>Loading…</div>;
   }
@@ -344,20 +442,20 @@ export default function DungeonPage() {
       loadout={loadout}
       onSave={async (slots) => {
         await api.dungeon.saveLoadout(slots);
-        await loadLoadout();
+        await loadAll();
         setEditingLoadout(false);
       }}
       onCancel={() => setEditingLoadout(false)}
     />;
   }
 
-  // ENTRANCE — show stats + start button
-  if (battleState === 'idle' || !run) {
+  // ─── ENTRANCE ───────────────────────────────────────────────────
+  if (phase === 'idle' || !map) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16, paddingBottom: 32 }}>
         <div className="card" style={{
-          padding: 20, textAlign: 'center', position: 'relative', overflow: 'hidden',
-          background: 'radial-gradient(circle at 50% 0%, rgba(127,29,29,0.25) 0%, transparent 60%), var(--bg2)',
+          padding: 22, textAlign: 'center', position: 'relative', overflow: 'hidden',
+          background: 'radial-gradient(circle at 50% 0%, rgba(127,29,29,0.3) 0%, transparent 60%), var(--bg2)',
         }}>
           <span className="dungeon-torch" style={{ position: 'absolute', top: 12, left: 12, fontSize: 22 }}>🔥</span>
           <span className="dungeon-torch right" style={{ position: 'absolute', top: 12, right: 12, fontSize: 22 }}>🔥</span>
@@ -367,27 +465,24 @@ export default function DungeonPage() {
           </div>
           <h2 style={{ fontFamily: 'Cinzel,serif', fontSize: 26, marginBottom: 4 }}>The Dungeon</h2>
           <p style={{ color: 'var(--text-muted)', fontSize: 13, marginBottom: 16 }}>
-            Six rooms. Escalating monsters. A boss at the end. Die and you get nothing.
+            Seven floors. Branching paths. Battles, shops, treasure, springs of rest — and a boss waiting at the top.
+            Pick your route. Die and you lose what you carried.
           </p>
 
-          {/* Avatar preview — your fighter, dressed for war */}
           <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 16 }}>
-            <div className="battle-idle" style={{
-              position: 'relative',
-              filter: 'drop-shadow(0 8px 16px rgba(0,0,0,0.5))',
-            }}>
+            <div className="battle-idle" style={{ filter: 'drop-shadow(0 8px 16px rgba(0,0,0,0.5))' }}>
               <PixelCharacter appearance={user || {}} equipped={inventory.equipped} size={120} />
             </div>
           </div>
 
           <div style={{
             display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 10,
-            marginBottom: 20, textAlign: 'left',
+            marginBottom: 18, textAlign: 'left',
           }}>
-            <StatChip label="Max HP"    value={maxHp || playerMaxHp(user?.level)} icon="❤️" />
-            <StatChip label="Magic"     value={loadout.magic}  icon="✨" />
-            <StatChip label="Armor"     value={loadout.armor}  icon="🛡️" />
-            <StatChip label="Weapon"    value={loadout.weaponClass || 'unarmed'} icon="🗡️" />
+            <StatChip label="Max HP" value={maxHp || playerMaxHp(user?.level)} icon="❤️" />
+            <StatChip label="Magic"  value={loadout.magic} icon="✨" />
+            <StatChip label="Armor"  value={loadout.armor} icon="🛡️" />
+            <StatChip label="Weapon" value={loadout.weaponClass || 'unarmed'} icon="🗡️" />
           </div>
 
           <div style={{ marginBottom: 16 }}>
@@ -396,9 +491,7 @@ export default function DungeonPage() {
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6 }}>
               {loadout.slotDetails.map((a, i) => (
-                <div key={i} style={{
-                  background: 'var(--bg3)', borderRadius: 8, padding: 8, border: '1px solid var(--border)',
-                }}>
+                <div key={i} style={{ background: 'var(--bg3)', borderRadius: 8, padding: 8, border: '1px solid var(--border)' }}>
                   <div style={{ fontSize: 18, marginBottom: 2 }}>{a.emoji}</div>
                   <div style={{ fontSize: 11, fontWeight: 600 }}>{a.name}</div>
                   <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>
@@ -410,8 +503,7 @@ export default function DungeonPage() {
           </div>
 
           <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
-            <button className="btn btn-ghost" onClick={() => setEditingLoadout(true)}
-              style={{ padding: '10px 18px', fontSize: 13 }}>
+            <button className="btn btn-ghost" onClick={() => setEditingLoadout(true)} style={{ padding: '10px 18px', fontSize: 13 }}>
               ⚙️ Edit Loadout
             </button>
             <button className="btn btn-primary" onClick={startRun} disabled={busy}
@@ -426,248 +518,363 @@ export default function DungeonPage() {
     );
   }
 
-  const monster = run.rooms[run.currentIndex];
-  const playerHpPct = (hp / maxHp) * 100;
-  const monsterHpPct = (monsterHp / monster.hp) * 100;
-
-  const isBoss = monster.tier === 5;
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12, paddingBottom: 32 }}>
-      {/* Dungeon corridor — rooms as connected nodes */}
-      <div className="card" style={{ padding: 14 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-          <div style={{ fontFamily: 'Cinzel,serif', fontSize: 13, color: 'var(--gold)' }}>
-            🏰 THE CATACOMBS
-          </div>
-          <div style={{ fontSize: 11, color: 'var(--text-muted)', letterSpacing: '0.06em', fontWeight: 600 }}>
-            ROOM {run.currentIndex + 1} OF {run.rooms.length}
-          </div>
-        </div>
-        <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          {/* Dashed path behind the nodes */}
-          <div style={{
-            position: 'absolute', left: 16, right: 16, top: '50%',
-            borderTop: '2px dashed var(--border)', zIndex: 1,
-          }} />
-          {run.rooms.map((r, i) => {
-            const state = i < run.currentIndex ? 'cleared'
-              : i === run.currentIndex ? 'current'
-              : r.tier === 5 ? 'boss'
-              : 'locked';
-            return (
-              <div key={i}
-                className={`corridor-node ${state}`}
-                title={state === 'locked' ? '???' : r.name}>
-                {state === 'cleared' ? '✓'
-                  : r.tier === 5 ? '👑'
-                  : state === 'current' ? r.sprite
-                  : '?'}
-              </div>
-            );
-          })}
-        </div>
+  // Header bar reused on every in-run screen
+  const RunHeader = () => (
+    <div className="card" style={{ padding: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+      <div style={{ flex: 1 }}>
+        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 3 }}>❤️ HP</div>
+        <HpBar value={hp} max={maxHp} color="#10b981" />
       </div>
-
-      {/* Battle stage */}
-      <div className={`card ${stageShake ? 'battle-shake' : ''} ${isBoss ? 'boss-room' : ''}`} style={{
-        padding: 0, overflow: 'hidden', position: 'relative',
-        background: isBoss
-          ? 'radial-gradient(circle at 50% 30%, rgba(127,29,29,0.4) 0%, #0a0a0f 70%)'
-          : 'radial-gradient(ellipse at 50% 30%, #1f1f3a 0%, #0a0a14 75%)',
-        border: `1px solid ${isBoss ? '#7f1d1d' : '#2a2a3a'}`,
-        minHeight: 320,
-      }}>
-        {/* Torches in the corners */}
-        <span className="dungeon-torch" style={{ position: 'absolute', top: 8, left: 8, fontSize: 22 }}>🔥</span>
-        <span className="dungeon-torch right" style={{ position: 'absolute', top: 8, right: 8, fontSize: 22 }}>🔥</span>
-
-        <div style={{ padding: 16, position: 'relative', minHeight: 320 }}>
-
-          {/* HP bars */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 14, gap: 12 }}>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 3, color: '#6ee7b7' }}>
-                {user?.username} <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>· Lv {user?.level}</span>
-              </div>
-              <HpBar value={hp} max={maxHp} color="#10b981" />
-            </div>
-            <div style={{ flex: 1, textAlign: 'right' }}>
-              <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 3, color: isBoss ? '#fde047' : '#fca5a5' }}>
-                {isBoss && '👑 '}{monster.name} <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>· T{monster.tier}</span>
-              </div>
-              <HpBar value={monsterHp} max={monster.hp} color={isBoss ? '#fbbf24' : '#ef4444'} />
-            </div>
-          </div>
-
-          {/* Combatants */}
-          <div style={{ position: 'relative', height: 200, display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', padding: '0 30px' }}>
-            {/* Floor shadow under combatants */}
-            <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 20,
-              background: 'radial-gradient(ellipse at 50% 100%, rgba(0,0,0,0.6) 0%, transparent 70%)' }} />
-
-            <div className={`${playerAnim || 'battle-idle'}`} style={{ position: 'relative' }}>
-              <PixelCharacter appearance={user || {}} equipped={inventory.equipped} size={130} />
-              {damages.filter(d => d.target === 'player').map(d => (
-                <div key={d.id} className={`battle-damage ${d.heal ? 'heal' : ''} ${d.crit ? 'crit' : ''}`}>
-                  {d.heal ? `+${d.value}` : d.value}
-                </div>
-              ))}
-              {guarding && (
-                <div style={{
-                  position: 'absolute', inset: -10, borderRadius: '50%',
-                  border: '2px solid #60a5fa', boxShadow: '0 0 18px #60a5fa88',
-                  animation: 'bob 1.2s ease-in-out infinite',
-                }} />
-              )}
-            </div>
-
-            <div className={`${monsterAnim || 'battle-idle'}`} style={{
-              position: 'relative',
-              fontSize: isBoss ? 140 : 110, lineHeight: 1,
-              filter: isBoss ? 'drop-shadow(0 0 24px #ef444466)' : 'none',
-            }}>
-              <span>{monster.sprite}</span>
-              {damages.filter(d => d.target === 'monster').map(d => (
-                <div key={d.id} className={`battle-damage ${d.crit ? 'crit' : ''}`}>
-                  {d.value}
-                </div>
-              ))}
-              {/* Loot pop on death */}
-              {lootDrop && battleState === 'won' && (
-                <div key={lootDrop.id} className="loot-pop" style={{
-                  position: 'absolute', top: 10, left: '50%',
-                  fontFamily: 'Cinzel,serif', fontWeight: 700, fontSize: 18,
-                  color: '#fcd34d', textShadow: '0 0 8px rgba(0,0,0,0.9), 2px 2px 0 #7c2d12',
-                  whiteSpace: 'nowrap',
-                }}>
-                  +{lootDrop.xp} XP · +{lootDrop.gold} 💰
-                </div>
-              )}
-            </div>
-
-            {projectile && (
-              <span key={projectile.id} className="battle-projectile" style={{ color: projectile.color }}>
-                {projectile.emoji}
-              </span>
-            )}
-          </div>
-
-          {/* Encounter intro overlay — monster slides in with name + taunt */}
-          {encounter && (
-            <div className="encounter-banner" style={{
-              position: 'absolute', inset: 0, zIndex: 6,
-              display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-              background: 'linear-gradient(90deg, transparent 0%, rgba(0,0,0,0.85) 30%, rgba(0,0,0,0.85) 70%, transparent 100%)',
-            }}>
-              <div style={{ fontSize: 80, marginBottom: 6 }}>{encounter.sprite}</div>
-              <div style={{ fontFamily: 'Cinzel,serif', fontSize: 24, fontWeight: 700, color: encounter.tier === 5 ? '#fde047' : '#fca5a5' }}>
-                {encounter.tier === 5 && '👑 '}{encounter.name}
-              </div>
-              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4, fontStyle: 'italic' }}>
-                "{encounter.taunt}"
-              </div>
-            </div>
-          )}
-
-          {/* Centred banner (FIGHT! / VICTORY! / DEFEAT) */}
-          {banner && (
-            <div className="battle-banner" style={{ color: banner.color }}>
-              {banner.text}
-            </div>
-          )}
+      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+        <div title="Your gold" style={{ fontSize: 13, color: '#fbbf24', fontWeight: 700 }}>
+          💰 {user?.gold || 0}
         </div>
+        {potions.length > 0 && (
+          <div style={{ display: 'flex', gap: 3, marginLeft: 6 }}>
+            {potions.map((p, i) => (
+              <button key={i} title={`${p.name}: ${p.desc}`}
+                onClick={() => usePotion(i)}
+                style={{
+                  width: 30, height: 30, borderRadius: 6, fontSize: 16,
+                  background: 'var(--bg3)', border: '1px solid var(--border)', cursor: 'pointer',
+                }}>{p.emoji}</button>
+            ))}
+          </div>
+        )}
       </div>
-
-      {/* Attack buttons / outcome */}
-      {battleState === 'active' && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
-          {loadout.slotDetails.map((a, i) => {
-            const cd = cooldowns[i] || 0;
-            const disabled = busy || cd > 0;
-            return (
-              <button key={i} onClick={() => useAttack(i)} disabled={disabled} style={{
-                background: disabled ? 'var(--bg3)' : 'var(--bg2)',
-                border: `1px solid ${disabled ? 'var(--border)' : 'var(--accent)'}`,
-                borderRadius: 10, padding: 10, cursor: disabled ? 'not-allowed' : 'pointer',
-                color: 'var(--text)', textAlign: 'center',
-                opacity: disabled ? 0.5 : 1, transition: 'all 0.15s',
-              }}>
-                <div style={{ fontSize: 20, marginBottom: 2 }}>{a.emoji}</div>
-                <div style={{ fontSize: 11, fontWeight: 600 }}>{a.name}</div>
-                <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>
-                  {cd > 0 ? `Cooldown: ${cd}` : a.tag === 'heal' ? `+${a.heal} HP` : `${a.power} dmg`}
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      )}
-
-      {battleState === 'won' && (
-        <div className="card animate-fade" style={{
-          padding: 18, textAlign: 'center',
-          borderColor: '#10b98166', background: 'rgba(16,185,129,0.08)',
-        }}>
-          <div style={{ fontSize: 36, marginBottom: 4 }}>🏆</div>
-          <div style={{ fontFamily: 'Cinzel,serif', fontSize: 20, color: '#6ee7b7', marginBottom: 8 }}>Victory!</div>
-          <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 14 }}>
-            Spoils: {monster.xp} XP &amp; {monster.gold} gold await
-          </div>
-          <button className="btn btn-primary" onClick={claimReward}
-            style={{ padding: '10px 28px', fontSize: 14, background: '#059669', borderColor: '#10b981' }}>
-            🏆 Claim Rewards
-          </button>
-        </div>
-      )}
-
-      {battleState === 'rewarded' && (
-        <div className="card animate-fade" style={{
-          padding: 18, textAlign: 'center',
-          borderColor: '#f59e0b66', background: 'rgba(245,158,11,0.08)',
-        }}>
-          <div style={{ display: 'flex', justifyContent: 'center', gap: 24, marginBottom: 14 }}>
-            <div className="reward-counter">
-              <div style={{ fontSize: 10, color: 'var(--text-muted)', letterSpacing: '0.08em', fontWeight: 600 }}>XP GAINED</div>
-              <div style={{ fontFamily: 'Cinzel,serif', fontSize: 28, fontWeight: 700, color: '#a78bfa' }}>
-                +{rewardCount.xp}
-              </div>
-            </div>
-            <div className="reward-counter" style={{ animationDelay: '0.15s' }}>
-              <div style={{ fontSize: 10, color: 'var(--text-muted)', letterSpacing: '0.08em', fontWeight: 600 }}>GOLD</div>
-              <div style={{ fontFamily: 'Cinzel,serif', fontSize: 28, fontWeight: 700, color: '#fbbf24' }}>
-                +{rewardCount.gold} 💰
-              </div>
-            </div>
-          </div>
-          <button className="btn btn-gold" onClick={advanceRoom} style={{ padding: '10px 28px', fontSize: 14 }}>
-            {run.currentIndex + 1 >= run.rooms.length ? '🚪 Exit Dungeon' : '🚪 Next Room →'}
-          </button>
-        </div>
-      )}
-
-      {battleState === 'lost' && (
-        <div className="card animate-fade" style={{ padding: 16, textAlign: 'center', borderColor: '#ef444466', background: 'rgba(239,68,68,0.08)' }}>
-          <div style={{ fontSize: 32, marginBottom: 4 }}>💀</div>
-          <div style={{ fontFamily: 'Cinzel,serif', fontSize: 18, color: '#fca5a5', marginBottom: 4 }}>Defeated</div>
-          <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 12 }}>
-            You return to the entrance empty-handed.
-          </div>
-          <button className="btn btn-ghost" onClick={flee} style={{ padding: '10px 24px' }}>
-            Leave
-          </button>
-        </div>
-      )}
-
-      {battleState === 'active' && (
-        <button className="btn btn-ghost" onClick={flee} style={{ padding: '8px', fontSize: 12, alignSelf: 'flex-end' }}>
-          🏃 Flee
-        </button>
-      )}
-
-      <LogPanel log={log} />
     </div>
   );
+
+  // ─── MAP VIEW ───────────────────────────────────────────────────
+  if (phase === 'map') {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12, paddingBottom: 32 }}>
+        <RunHeader />
+        <div className="card" style={{
+          padding: 16, position: 'relative', overflow: 'hidden',
+          background: 'radial-gradient(circle at 50% 0%, rgba(127,29,29,0.18) 0%, transparent 60%), var(--bg2)',
+        }}>
+          <div style={{ fontFamily: 'Cinzel,serif', fontSize: 13, color: 'var(--gold)', textAlign: 'center', letterSpacing: '0.15em', marginBottom: 12 }}>
+            🏰 CATACOMBS — CHOOSE YOUR PATH
+          </div>
+          <MapView
+            map={map}
+            cleared={cleared}
+            position={position}
+            nextIds={new Set(nextNodes.map(n => n.id))}
+            onPick={(n) => enterNode(n)}
+          />
+        </div>
+        <LogPanel log={log} />
+        <button className="btn btn-ghost" onClick={exitRun} style={{ alignSelf: 'flex-end', padding: '6px 14px', fontSize: 12 }}>
+          🏃 Flee Dungeon
+        </button>
+      </div>
+    );
+  }
+
+  // ─── BATTLE / REWARDED ──────────────────────────────────────────
+  if (phase === 'battle' || phase === 'rewarded') {
+    const monster = activeNode.monster;
+    const isBoss = activeNode.type === 'boss';
+    const isElite = activeNode.type === 'elite';
+
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12, paddingBottom: 32 }}>
+        <RunHeader />
+
+        <div className={`card ${stageShake ? 'battle-shake' : ''} ${isBoss ? 'boss-room' : ''}`} style={{
+          padding: 0, overflow: 'hidden', position: 'relative',
+          background: isBoss
+            ? 'radial-gradient(circle at 50% 30%, rgba(127,29,29,0.4) 0%, #0a0a0f 70%)'
+            : isElite
+            ? 'radial-gradient(ellipse at 50% 30%, #3a1f0f 0%, #0a0a14 75%)'
+            : 'radial-gradient(ellipse at 50% 30%, #1f1f3a 0%, #0a0a14 75%)',
+          border: `1px solid ${isBoss ? '#7f1d1d' : isElite ? '#7c2d12' : '#2a2a3a'}`,
+          minHeight: 320,
+        }}>
+          <span className="dungeon-torch" style={{ position: 'absolute', top: 8, left: 8, fontSize: 22 }}>🔥</span>
+          <span className="dungeon-torch right" style={{ position: 'absolute', top: 8, right: 8, fontSize: 22 }}>🔥</span>
+
+          <div style={{ padding: 16, position: 'relative', minHeight: 320 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 14, gap: 12 }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 3, color: '#6ee7b7' }}>
+                  {user?.username} <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>· Lv {user?.level}</span>
+                </div>
+                <HpBar value={hp} max={maxHp} color="#10b981" />
+              </div>
+              <div style={{ flex: 1, textAlign: 'right' }}>
+                <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 3, color: isBoss ? '#fde047' : isElite ? '#fb923c' : '#fca5a5' }}>
+                  {isBoss && '👑 '}{isElite && '🔥 '}{monster.name} <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>· T{monster.tier}</span>
+                </div>
+                <HpBar value={monsterHp} max={monster.hp} color={isBoss ? '#fbbf24' : isElite ? '#fb923c' : '#ef4444'} />
+              </div>
+            </div>
+
+            <div style={{ position: 'relative', height: 200, display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', padding: '0 30px' }}>
+              <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 20,
+                background: 'radial-gradient(ellipse at 50% 100%, rgba(0,0,0,0.6) 0%, transparent 70%)' }} />
+
+              <div className={`${playerAnim || 'battle-idle'}`} style={{ position: 'relative' }}>
+                <PixelCharacter appearance={user || {}} equipped={inventory.equipped} size={130} />
+                {damages.filter(d => d.target === 'player').map(d => (
+                  <div key={d.id} className={`battle-damage ${d.heal ? 'heal' : ''} ${d.crit ? 'crit' : ''}`}>
+                    {d.heal ? `+${d.value}` : d.value}
+                  </div>
+                ))}
+                {guarding && (
+                  <div style={{ position: 'absolute', inset: -10, borderRadius: '50%',
+                    border: '2px solid #60a5fa', boxShadow: '0 0 18px #60a5fa88',
+                    animation: 'bob 1.2s ease-in-out infinite' }} />
+                )}
+                {strengthBuff && (
+                  <div style={{ position: 'absolute', top: -10, left: '50%', transform: 'translateX(-50%)',
+                    fontSize: 22, animation: 'bob 1s ease-in-out infinite' }}>🧉</div>
+                )}
+              </div>
+
+              <div className={`${monsterAnim || 'battle-idle'}`} style={{
+                position: 'relative',
+                fontSize: isBoss ? 140 : isElite ? 120 : 110, lineHeight: 1,
+                filter: isBoss ? 'drop-shadow(0 0 24px #ef444466)' : isElite ? 'drop-shadow(0 0 18px #fb923c66)' : 'none',
+              }}>
+                <span>{monster.sprite}</span>
+                {damages.filter(d => d.target === 'monster').map(d => (
+                  <div key={d.id} className={`battle-damage ${d.crit ? 'crit' : ''}`}>{d.value}</div>
+                ))}
+                {lootDrop && phase === 'rewarded' && (
+                  <div key={lootDrop.id} className="loot-pop" style={{
+                    position: 'absolute', top: 10, left: '50%',
+                    fontFamily: 'Cinzel,serif', fontWeight: 700, fontSize: 18,
+                    color: '#fcd34d', textShadow: '0 0 8px rgba(0,0,0,0.9), 2px 2px 0 #7c2d12',
+                    whiteSpace: 'nowrap',
+                  }}>
+                    +{lootDrop.xp} XP · +{lootDrop.gold} 💰
+                  </div>
+                )}
+              </div>
+
+              {projectile && (
+                <span key={projectile.id} className="battle-projectile" style={{ color: projectile.color }}>
+                  {projectile.emoji}
+                </span>
+              )}
+            </div>
+
+            {encounter && (
+              <div className="encounter-banner" style={{
+                position: 'absolute', inset: 0, zIndex: 6,
+                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                background: 'linear-gradient(90deg, transparent 0%, rgba(0,0,0,0.85) 30%, rgba(0,0,0,0.85) 70%, transparent 100%)',
+              }}>
+                <div style={{ fontSize: 80, marginBottom: 6 }}>{encounter.sprite}</div>
+                <div style={{ fontFamily: 'Cinzel,serif', fontSize: 24, fontWeight: 700, color: encounter.tier === 5 ? '#fde047' : encounter.tier === 4 ? '#fb923c' : '#fca5a5' }}>
+                  {encounter.tier === 5 && '👑 '}{encounter.tier === 4 && '🔥 '}{encounter.name}
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4, fontStyle: 'italic' }}>
+                  "{encounter.taunt}"
+                </div>
+              </div>
+            )}
+
+            {banner && (
+              <div className="battle-banner" style={{ color: banner.color }}>
+                {banner.text}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {phase === 'battle' && (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
+            {loadout.slotDetails.map((a, i) => {
+              const cd = cooldowns[i] || 0;
+              const disabled = busy || cd > 0;
+              return (
+                <button key={i} onClick={() => useAttack(i)} disabled={disabled} style={{
+                  background: disabled ? 'var(--bg3)' : 'var(--bg2)',
+                  border: `1px solid ${disabled ? 'var(--border)' : 'var(--accent)'}`,
+                  borderRadius: 10, padding: 10, cursor: disabled ? 'not-allowed' : 'pointer',
+                  color: 'var(--text)', textAlign: 'center',
+                  opacity: disabled ? 0.5 : 1, transition: 'all 0.15s',
+                }}>
+                  <div style={{ fontSize: 20, marginBottom: 2 }}>{a.emoji}</div>
+                  <div style={{ fontSize: 11, fontWeight: 600 }}>{a.name}</div>
+                  <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>
+                    {cd > 0 ? `Cooldown: ${cd}` : a.tag === 'heal' ? `+${a.heal} HP` : `${a.power} dmg`}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {phase === 'rewarded' && (
+          <div className="card animate-fade" style={{
+            padding: 18, textAlign: 'center',
+            borderColor: '#f59e0b66', background: 'rgba(245,158,11,0.08)',
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'center', gap: 24, marginBottom: 14 }}>
+              <div className="reward-counter">
+                <div style={{ fontSize: 10, color: 'var(--text-muted)', letterSpacing: '0.08em', fontWeight: 600 }}>XP GAINED</div>
+                <div style={{ fontFamily: 'Cinzel,serif', fontSize: 28, fontWeight: 700, color: '#a78bfa' }}>+{rewardCount.xp}</div>
+              </div>
+              <div className="reward-counter" style={{ animationDelay: '0.15s' }}>
+                <div style={{ fontSize: 10, color: 'var(--text-muted)', letterSpacing: '0.08em', fontWeight: 600 }}>GOLD</div>
+                <div style={{ fontFamily: 'Cinzel,serif', fontSize: 28, fontWeight: 700, color: '#fbbf24' }}>+{rewardCount.gold} 💰</div>
+              </div>
+            </div>
+            <button className="btn btn-gold" onClick={completeRoom} style={{ padding: '10px 28px', fontSize: 14 }}>
+              🗺️ Back to map
+            </button>
+          </div>
+        )}
+
+        <LogPanel log={log} />
+      </div>
+    );
+  }
+
+  // ─── SHOP ────────────────────────────────────────────────────────
+  if (phase === 'shop') {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12, paddingBottom: 32 }}>
+        <RunHeader />
+        <div className="card" style={{ padding: 18 }}>
+          <div style={{ textAlign: 'center', marginBottom: 14 }}>
+            <div style={{ fontSize: 36, marginBottom: 4 }}>🛒</div>
+            <h2 style={{ fontFamily: 'Cinzel,serif', fontSize: 20 }}>Wandering Merchant</h2>
+            <p style={{ color: 'var(--text-muted)', fontSize: 13, marginTop: 4 }}>
+              "Travel safely, friend. Take what you need."
+            </p>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 10, marginBottom: 14 }}>
+            {shopOffer.map(p => {
+              const afford = (user?.gold || 0) >= p.cost;
+              return (
+                <div key={p.id} style={{
+                  background: 'var(--bg3)', borderRadius: 10, padding: 12,
+                  border: `1px solid ${afford ? '#22c55e55' : 'var(--border)'}`, textAlign: 'center',
+                }}>
+                  <div style={{ fontSize: 30, marginBottom: 4 }}>{p.emoji}</div>
+                  <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 2 }}>{p.name}</div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 8, minHeight: 26 }}>{p.desc}</div>
+                  <button className="btn btn-primary"
+                    disabled={!afford}
+                    onClick={() => buyPotion(p)}
+                    style={{ padding: '6px 12px', fontSize: 12, opacity: afford ? 1 : 0.4, background: '#15803d', borderColor: '#22c55e' }}>
+                    💰 {p.cost}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+          <div style={{ textAlign: 'center' }}>
+            <button className="btn btn-gold" onClick={completeRoom} style={{ padding: '10px 28px', fontSize: 14 }}>
+              🚪 Leave the shop
+            </button>
+          </div>
+        </div>
+        <LogPanel log={log} />
+      </div>
+    );
+  }
+
+  // ─── REST SPRING ─────────────────────────────────────────────────
+  if (phase === 'rest') {
+    const healAmount = Math.round(maxHp * 0.4);
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12, paddingBottom: 32 }}>
+        <RunHeader />
+        <div className="card" style={{
+          padding: 22, textAlign: 'center',
+          background: 'radial-gradient(circle at 50% 0%, rgba(59,130,246,0.18) 0%, transparent 60%), var(--bg2)',
+        }}>
+          <div style={{ fontSize: 48, marginBottom: 8 }}>⛲</div>
+          <h2 style={{ fontFamily: 'Cinzel,serif', fontSize: 20, marginBottom: 6 }}>A quiet spring</h2>
+          <p style={{ color: 'var(--text-muted)', fontSize: 13, marginBottom: 18, maxWidth: 360, margin: '0 auto 18px' }}>
+            The water is clear and cold. Drinking from it will restore <strong style={{ color: '#6ee7b7' }}>{healAmount} HP</strong>.
+          </p>
+          <button className="btn btn-primary" onClick={restAtSpring}
+            style={{ padding: '10px 28px', fontSize: 14, background: '#1d4ed8', borderColor: '#3b82f6' }}>
+            ⛲ Rest (+{healAmount} HP)
+          </button>
+        </div>
+        <LogPanel log={log} />
+      </div>
+    );
+  }
+
+  // ─── TREASURE ────────────────────────────────────────────────────
+  if (phase === 'treasure') {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12, paddingBottom: 32 }}>
+        <RunHeader />
+        <div className="card" style={{
+          padding: 22, textAlign: 'center',
+          background: 'radial-gradient(circle at 50% 0%, rgba(245,158,11,0.18) 0%, transparent 60%), var(--bg2)',
+        }}>
+          <div style={{ fontSize: 56, marginBottom: 8 }}>💎</div>
+          <h2 style={{ fontFamily: 'Cinzel,serif', fontSize: 20, marginBottom: 6 }}>You found a chest</h2>
+          <div className="reward-counter" style={{ marginBottom: 14 }}>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', letterSpacing: '0.08em', fontWeight: 600 }}>GOLD</div>
+            <div style={{ fontFamily: 'Cinzel,serif', fontSize: 32, fontWeight: 700, color: '#fbbf24' }}>+{rewardCount.gold} 💰</div>
+          </div>
+          <button className="btn btn-gold" onClick={completeRoom} style={{ padding: '10px 28px', fontSize: 14 }}>
+            🗺️ Back to map
+          </button>
+        </div>
+        <LogPanel log={log} />
+      </div>
+    );
+  }
+
+  // ─── DEAD ───────────────────────────────────────────────────────
+  if (phase === 'dead') {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12, paddingBottom: 32 }}>
+        <div className="card animate-fade" style={{
+          padding: 24, textAlign: 'center',
+          borderColor: '#ef444466', background: 'rgba(239,68,68,0.08)',
+        }}>
+          <div style={{ fontSize: 48, marginBottom: 6 }}>💀</div>
+          <div style={{ fontFamily: 'Cinzel,serif', fontSize: 22, color: '#fca5a5', marginBottom: 6 }}>You fell in the dark.</div>
+          <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 16 }}>
+            The catacombs claim another soul. You keep the gold and XP you earned, but the run is over.
+          </div>
+          <button className="btn btn-ghost" onClick={exitRun} style={{ padding: '10px 28px' }}>
+            Leave the dungeon
+          </button>
+        </div>
+        <LogPanel log={log} />
+      </div>
+    );
+  }
+
+  // ─── CLEARED ────────────────────────────────────────────────────
+  if (phase === 'cleared') {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12, paddingBottom: 32 }}>
+        <div className="card animate-fade" style={{
+          padding: 24, textAlign: 'center',
+          borderColor: '#fbbf2466', background: 'radial-gradient(circle at 50% 0%, rgba(251,191,36,0.18) 0%, var(--bg2) 70%)',
+        }}>
+          <div style={{ fontSize: 56, marginBottom: 6 }}>🏆</div>
+          <div style={{ fontFamily: 'Cinzel,serif', fontSize: 24, color: '#fde047', marginBottom: 6 }}>DUNGEON CLEARED</div>
+          <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 18 }}>
+            You've slain the boss and emerged from the catacombs alive. Hero.
+          </div>
+          <button className="btn btn-gold" onClick={exitRun} style={{ padding: '10px 28px' }}>
+            🚪 Exit Triumphantly
+          </button>
+        </div>
+        <LogPanel log={log} />
+      </div>
+    );
+  }
+
+  return null;
 }
 
 // ── Subcomponents ─────────────────────────────────────────────────────
@@ -676,10 +883,7 @@ function HpBar({ value, max, color }) {
   const pct = Math.max(0, Math.min(100, (value / max) * 100));
   return (
     <div style={{ position: 'relative', height: 14, background: 'var(--bg3)', borderRadius: 99, overflow: 'hidden', border: '1px solid var(--border)' }}>
-      <div style={{
-        height: '100%', width: `${pct}%`, background: color,
-        transition: 'width 0.4s ease',
-      }} />
+      <div style={{ height: '100%', width: `${pct}%`, background: color, transition: 'width 0.4s ease' }} />
       <div style={{
         position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
         fontSize: 10, fontWeight: 700, color: '#fff', textShadow: '0 1px 2px rgba(0,0,0,0.7)',
@@ -706,13 +910,112 @@ function LogPanel({ log }) {
   return (
     <div className="card" style={{ padding: 12, maxHeight: 140, overflowY: 'auto' }}>
       <div style={{ fontSize: 10, color: 'var(--text-muted)', letterSpacing: '0.08em', fontWeight: 600, marginBottom: 6 }}>
-        BATTLE LOG
+        LOG
       </div>
       {log.length === 0 ? (
-        <div style={{ fontSize: 12, color: 'var(--text-muted)', fontStyle: 'italic' }}>The dungeon is quiet.</div>
+        <div style={{ fontSize: 12, color: 'var(--text-muted)', fontStyle: 'italic' }}>Silence.</div>
       ) : log.map((line, i) => (
         <div key={i} style={{ fontSize: 12, color: 'var(--text)', marginBottom: 2, lineHeight: 1.4 }}>{line}</div>
       ))}
+    </div>
+  );
+}
+
+// Branching dungeon map. Nodes are positioned on a column-by-floor grid,
+// connected by SVG paths underneath. Reachable next-nodes are clickable.
+function MapView({ map, cleared, position, nextIds, onPick }) {
+  if (!map) return null;
+  const COLS = 4;
+  const FLOORS = Math.max(...map.nodes.map(n => n.floor)) + 1;
+  const cellW = 70;
+  const cellH = 70;
+  const width = COLS * cellW;
+  const height = FLOORS * cellH;
+
+  // Convert (floor, col) to x/y. Floor 0 (start) goes at the BOTTOM so you
+  // climb upward toward the boss — feels right for a "spire/catacombs" run.
+  const posOf = (node) => ({
+    x: node.col * cellW + cellW / 2,
+    y: (FLOORS - 1 - node.floor) * cellH + cellH / 2,
+  });
+
+  return (
+    <div style={{ display: 'flex', justifyContent: 'center', padding: 8 }}>
+      <div style={{ position: 'relative', width, height }}>
+        <svg width={width} height={height} style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
+          {map.edges.map(([a, b], i) => {
+            const A = map.nodes.find(n => n.id === a);
+            const B = map.nodes.find(n => n.id === b);
+            if (!A || !B) return null;
+            const pa = posOf(A);
+            const pb = posOf(B);
+            const isTraveled = cleared.has(a) && cleared.has(b);
+            const isAvailable = a === position && nextIds.has(b);
+            const stroke = isTraveled ? '#10b981'
+              : isAvailable ? '#fde047'
+              : '#3a3a55';
+            const strokeWidth = isAvailable ? 3 : 2;
+            const dash = isTraveled || isAvailable ? '0' : '4 4';
+            return (
+              <line key={i} x1={pa.x} y1={pa.y} x2={pb.x} y2={pb.y}
+                stroke={stroke} strokeWidth={strokeWidth} strokeDasharray={dash} />
+            );
+          })}
+        </svg>
+
+        {map.nodes.map(node => {
+          const p = posOf(node);
+          const isCleared = cleared.has(node.id);
+          const isCurrent = node.id === position;
+          const isAvailable = nextIds.has(node.id);
+          const meta = NODE_META[node.type] || NODE_META.battle;
+          const tip = node.monster
+            ? `${meta.label}: ${node.monster.name} (T${node.monster.tier})`
+            : meta.label;
+          // Map icon: monster sprite for combat nodes, otherwise the meta icon.
+          const icon = (node.type === 'battle' || node.type === 'elite' || node.type === 'boss') && node.monster
+            ? node.monster.sprite
+            : meta.icon;
+
+          const state = isCleared ? 'cleared'
+            : isCurrent ? 'current'
+            : isAvailable ? 'available'
+            : 'locked';
+
+          return (
+            <button key={node.id}
+              title={tip}
+              disabled={!isAvailable}
+              onClick={() => isAvailable && onPick(node)}
+              style={{
+                position: 'absolute', left: p.x - 24, top: p.y - 24,
+                width: 48, height: 48, borderRadius: '50%',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: node.type === 'boss' ? 26 : 22, cursor: isAvailable ? 'pointer' : 'default',
+                background: state === 'cleared' ? '#064e3b'
+                  : state === 'current' ? '#1e3a8a'
+                  : state === 'available' ? '#7c2d12'
+                  : 'var(--bg3)',
+                color: state === 'locked' ? 'var(--text-muted)' : 'var(--text)',
+                border: `2px solid ${
+                  state === 'cleared' ? '#10b981'
+                  : state === 'current' ? '#60a5fa'
+                  : state === 'available' ? '#fbbf24'
+                  : 'var(--border)'
+                }`,
+                boxShadow: state === 'available' ? '0 0 16px #fbbf2488'
+                  : node.type === 'boss' ? '0 0 12px #fbbf2466'
+                  : 'none',
+                opacity: state === 'locked' ? 0.65 : 1,
+                transition: 'all 0.2s',
+                animation: state === 'available' ? 'bob 1.4s ease-in-out infinite' : 'none',
+                padding: 0,
+              }}>
+              {icon}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }

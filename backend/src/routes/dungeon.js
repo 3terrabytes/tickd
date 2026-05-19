@@ -3,7 +3,8 @@ const { pool } = require('../db');
 const auth = require('../middleware/auth');
 const { addXP } = require('../utils/xp');
 const { ATTACKS, attackById, attacksForClass, DEFAULT_LOADOUT } = require('../data/attacks');
-const { MONSTERS, monsterById, generateRun } = require('../data/monsters');
+const { MONSTERS, monsterById } = require('../data/monsters');
+const { generateMap, POTIONS, potionById } = require('../data/dungeon');
 const { itemById, weaponClassOf } = require('../data/items');
 
 const router = express.Router();
@@ -111,12 +112,19 @@ router.post('/loadout', async (req, res) => {
   }
 });
 
-// Start a new dungeon run — server picks the monster sequence.
+// Start a new dungeon run. Returns a branching map of nodes/edges. Battle
+// nodes include a `monster` field with the resolved monster data so the
+// frontend can preview it on the map before committing.
 router.post('/run', async (req, res) => {
   try {
-    const sequence = generateRun();
-    const monsters = sequence.map(id => monsterById(id));
-    res.json({ rooms: monsters });
+    const map = generateMap();
+    // Decorate combat nodes with full monster data for the frontend preview.
+    const nodes = map.nodes.map(n => {
+      if (!n.monsterId) return n;
+      const m = monsterById(n.monsterId);
+      return { ...n, monster: m };
+    });
+    res.json({ map: { nodes, edges: map.edges } });
   } catch (err) {
     console.error('dungeon/run error', err);
     res.status(500).json({ error: 'Server error' });
@@ -144,8 +152,54 @@ router.post('/reward', async (req, res) => {
   }
 });
 
+// Spend gold on a dungeon potion. Server validates the potion and the
+// user's gold balance, then deducts. Returns the potion + new balance.
+router.post('/buy-potion/:potionId', async (req, res) => {
+  try {
+    const potion = potionById(req.params.potionId);
+    if (!potion) return res.status(404).json({ error: 'Potion not found' });
+
+    const { rows } = await pool.query('SELECT gold, username FROM users WHERE id = $1', [req.userId]);
+    const me = rows[0];
+    const isTheDevs = me?.username?.toLowerCase() === 'thedevs';
+    if (!isTheDevs && (me?.gold || 0) < potion.cost) {
+      return res.status(400).json({ error: 'Not enough gold' });
+    }
+
+    if (!isTheDevs) {
+      await pool.query('UPDATE users SET gold = gold - $1 WHERE id = $2', [potion.cost, req.userId]);
+    }
+    const { rows: updated } = await pool.query('SELECT gold FROM users WHERE id = $1', [req.userId]);
+    res.json({ success: true, potion, gold: updated[0].gold });
+  } catch (err) {
+    console.error('dungeon/buy-potion error', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Treasure / chest reward — grants a flat gold amount based on the room
+// tier. Used by the treasure-room node type. Always honoured (the client
+// chose this room, and treasure rewards are small/non-grindable).
+router.post('/treasure', async (req, res) => {
+  try {
+    const { tier } = req.body;
+    const t = Math.max(1, Math.min(5, parseInt(tier) || 1));
+    const gold = 40 + t * 30 + Math.floor(Math.random() * 20);
+    await pool.query(
+      'UPDATE users SET gold = gold + $1, lifetime_gold = COALESCE(lifetime_gold, 0) + $1 WHERE id = $2',
+      [gold, req.userId]
+    );
+    const { rows } = await pool.query('SELECT gold FROM users WHERE id = $1', [req.userId]);
+    res.json({ gold, user: rows[0] });
+  } catch (err) {
+    console.error('dungeon/treasure error', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // Catalog endpoints — used by the loadout editor.
 router.get('/attacks', (req, res) => res.json(ATTACKS));
 router.get('/monsters', (req, res) => res.json(MONSTERS));
+router.get('/potions', (req, res) => res.json(POTIONS));
 
 module.exports = router;

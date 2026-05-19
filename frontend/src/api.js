@@ -103,7 +103,10 @@ export const api = {
     saveLoadout: (slots) => req('POST', '/dungeon/loadout', { slots }),
     startRun: () => req('POST', '/dungeon/run'),
     reward: (monsterId) => req('POST', '/dungeon/reward', { monsterId }),
+    treasure: (tier) => req('POST', '/dungeon/treasure', { tier }),
+    buyPotion: (potionId) => req('POST', `/dungeon/buy-potion/${potionId}`),
     attacks: () => req('GET', '/dungeon/attacks'),
     monsters: () => req('GET', '/dungeon/monsters'),
+    potions: () => req('GET', '/dungeon/potions'),
   },
 };
