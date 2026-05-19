@@ -4,55 +4,53 @@
 // hp     = the monster's HP pool
 // power  = base damage per attack
 // xp     = reward XP on victory
-// gold   = reward gold on victory
+// gold   = reward gold on victory  (kept low — habits are the main grind)
 // sprite = big emoji used as the "model"
 // taunt  = flavor text shown at battle start
 
 const MONSTERS = [
   // ── tier 1: warmup ───────────────────────────────────────────────────
-  { id: 'slime',       name: 'Green Slime',     tier: 1, hp: 30,  power: 6,  xp: 20,  gold: 12, sprite: '🟢', element: 'poison',   taunt: 'It jiggles menacingly.' },
-  { id: 'bat',         name: 'Cave Bat',        tier: 1, hp: 26,  power: 8,  xp: 22,  gold: 14, sprite: '🦇', element: 'shadow',   taunt: 'Screeches in the dark.' },
-  { id: 'rat',         name: 'Plague Rat',      tier: 1, hp: 22,  power: 7,  xp: 18,  gold: 10, sprite: '🐀', element: 'poison',   taunt: 'You smell it before you see it.' },
+  { id: 'slime',       name: 'Green Slime',     tier: 1, hp: 30,  power: 6,  xp: 20,  gold: 5,  sprite: '🟢', element: 'poison',   taunt: 'It jiggles menacingly.' },
+  { id: 'bat',         name: 'Cave Bat',        tier: 1, hp: 26,  power: 8,  xp: 22,  gold: 6,  sprite: '🦇', element: 'shadow',   taunt: 'Screeches in the dark.' },
+  { id: 'rat',         name: 'Plague Rat',      tier: 1, hp: 22,  power: 7,  xp: 18,  gold: 4,  sprite: '🐀', element: 'poison',   taunt: 'You smell it before you see it.' },
 
   // ── tier 2: standard ─────────────────────────────────────────────────
-  { id: 'goblin',      name: 'Goblin Scout',    tier: 2, hp: 45,  power: 10, xp: 35,  gold: 22, sprite: '👺', element: 'physical', taunt: 'It grins, showing too many teeth.' },
-  { id: 'skeleton',    name: 'Skeleton',        tier: 2, hp: 50,  power: 11, xp: 40,  gold: 24, sprite: '💀', element: 'shadow',   taunt: 'The bones rattle into formation.' },
-  { id: 'spider',      name: 'Giant Spider',    tier: 2, hp: 48,  power: 12, xp: 42,  gold: 26, sprite: '🕷️', element: 'poison',   taunt: 'Eight eyes lock onto you.' },
-  { id: 'wolf',        name: 'Dire Wolf',       tier: 2, hp: 55,  power: 13, xp: 45,  gold: 28, sprite: '🐺', element: 'physical', taunt: 'A guttural growl fills the chamber.' },
+  { id: 'goblin',      name: 'Goblin Scout',    tier: 2, hp: 45,  power: 10, xp: 35,  gold: 10, sprite: '👺', element: 'physical', taunt: 'It grins, showing too many teeth.' },
+  { id: 'skeleton',    name: 'Skeleton',        tier: 2, hp: 50,  power: 11, xp: 40,  gold: 11, sprite: '💀', element: 'shadow',   taunt: 'The bones rattle into formation.' },
+  { id: 'spider',      name: 'Giant Spider',    tier: 2, hp: 48,  power: 12, xp: 42,  gold: 12, sprite: '🕷️', element: 'poison',   taunt: 'Eight eyes lock onto you.' },
+  { id: 'wolf',        name: 'Dire Wolf',       tier: 2, hp: 55,  power: 13, xp: 45,  gold: 13, sprite: '🐺', element: 'physical', taunt: 'A guttural growl fills the chamber.' },
 
   // ── tier 3: tough ────────────────────────────────────────────────────
-  { id: 'orc',         name: 'Orc Brute',       tier: 3, hp: 80,  power: 15, xp: 65,  gold: 45, sprite: '👹', element: 'physical', taunt: '"PUNY MORTAL."' },
-  { id: 'wraith',      name: 'Vengeful Wraith', tier: 3, hp: 70,  power: 17, xp: 70,  gold: 48, sprite: '👻', element: 'shadow',   taunt: 'The temperature drops twenty degrees.' },
-  { id: 'mimic',       name: 'Mimic Chest',     tier: 3, hp: 90,  power: 14, xp: 72,  gold: 60, sprite: '🎁', element: 'physical', taunt: 'You should have known better.' },
+  { id: 'orc',         name: 'Orc Brute',       tier: 3, hp: 80,  power: 15, xp: 65,  gold: 20, sprite: '👹', element: 'physical', taunt: '"PUNY MORTAL."' },
+  { id: 'wraith',      name: 'Vengeful Wraith', tier: 3, hp: 70,  power: 17, xp: 70,  gold: 22, sprite: '👻', element: 'shadow',   taunt: 'The temperature drops twenty degrees.' },
+  { id: 'mimic',       name: 'Mimic Chest',     tier: 3, hp: 90,  power: 14, xp: 72,  gold: 28, sprite: '🎁', element: 'physical', taunt: 'You should have known better.' },
 
   // ── tier 4: elite ────────────────────────────────────────────────────
-  { id: 'minotaur',    name: 'Minotaur',        tier: 4, hp: 120, power: 20, xp: 110, gold: 80,  sprite: '🐂', element: 'physical', taunt: 'It paws the ground, then charges.' },
-  { id: 'lich',        name: 'Frost Lich',      tier: 4, hp: 110, power: 22, xp: 120, gold: 85,  sprite: '🧙', element: 'ice',      taunt: '"Your soul will warm my tomb."' },
-  { id: 'phoenix',     name: 'Ember Phoenix',   tier: 4, hp: 115, power: 21, xp: 115, gold: 82,  sprite: '🦅', element: 'fire',      taunt: 'It bursts into flame.' },
+  { id: 'minotaur',    name: 'Minotaur',        tier: 4, hp: 120, power: 20, xp: 110, gold: 38, sprite: '🐂', element: 'physical', taunt: 'It paws the ground, then charges.' },
+  { id: 'lich',        name: 'Frost Lich',      tier: 4, hp: 110, power: 22, xp: 120, gold: 40, sprite: '🧙', element: 'ice',      taunt: '"Your soul will warm my tomb."' },
+  { id: 'phoenix',     name: 'Ember Phoenix',   tier: 4, hp: 115, power: 21, xp: 115, gold: 39, sprite: '🦅', element: 'fire',     taunt: 'It bursts into flame.' },
 
   // ── tier 5: bosses ───────────────────────────────────────────────────
-  { id: 'dragon',      name: 'Ancient Dragon',  tier: 5, hp: 220, power: 28, xp: 260, gold: 200, sprite: '🐉', element: 'fire',      taunt: 'The dungeon shakes as it roars.' },
-  { id: 'demon_lord',  name: 'Demon Lord',      tier: 5, hp: 240, power: 30, xp: 280, gold: 220, sprite: '😈', element: 'shadow',    taunt: '"At last. A challenger."' },
-  { id: 'void_knight', name: 'Void Knight',     tier: 5, hp: 250, power: 26, xp: 300, gold: 240, sprite: '🌌', element: 'arcane',    taunt: 'A figure of impossible darkness draws its blade.' },
+  { id: 'dragon',      name: 'Ancient Dragon',  tier: 5, hp: 220, power: 28, xp: 260, gold: 90, sprite: '🐉', element: 'fire',      taunt: 'The dungeon shakes as it roars.' },
+  { id: 'demon_lord',  name: 'Demon Lord',      tier: 5, hp: 240, power: 30, xp: 280, gold: 100, sprite: '😈', element: 'shadow',    taunt: '"At last. A challenger."' },
+  { id: 'void_knight', name: 'Void Knight',     tier: 5, hp: 250, power: 26, xp: 300, gold: 110, sprite: '🌌', element: 'arcane',    taunt: 'A figure of impossible darkness draws its blade.' },
 ];
 
 const monsterById = (id) => MONSTERS.find(m => m.id === id);
 
-// Build a 6-room linear dungeon run: 5 escalating fights + a boss.
-// Returns an array of monster ids.
-const generateRun = () => {
-  const pick = (tier) => {
-    const pool = MONSTERS.filter(m => m.tier === tier);
-    return pool[Math.floor(Math.random() * pool.length)].id;
-  };
-  return [
-    pick(1),
-    pick(1),
-    pick(2),
-    pick(3),
-    pick(4),
-    pick(5), // boss
-  ];
-};
+// Pick a monster intent for the next turn. Pattern:
+//   - Heavy hit every 3rd turn
+//   - Defend every 4th turn (mid+ tiers)
+//   - Otherwise: basic strike
+// Returns { kind: 'strike' | 'heavy' | 'defend', power }
+function pickIntent(monster, turn) {
+  if (turn > 0 && turn % 3 === 0) {
+    return { kind: 'heavy', power: Math.round(monster.power * 1.6) };
+  }
+  if (monster.tier >= 3 && turn > 0 && turn % 4 === 0) {
+    return { kind: 'defend', power: 0 };
+  }
+  return { kind: 'strike', power: monster.power };
+}
 
-module.exports = { MONSTERS, monsterById, generateRun };
+module.exports = { MONSTERS, monsterById, pickIntent };

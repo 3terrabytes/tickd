@@ -2,7 +2,7 @@ const express = require('express');
 const { pool } = require('../db');
 const auth = require('../middleware/auth');
 const { addXP } = require('../utils/xp');
-const { ATTACKS, attackById, attacksForClass, DEFAULT_LOADOUT } = require('../data/attacks');
+const { ATTACKS, attackById, attacksForClass, DEFAULT_LOADOUT, defaultLoadoutFor } = require('../data/attacks');
 const { MONSTERS, monsterById } = require('../data/monsters');
 const { generateMap, POTIONS, potionById } = require('../data/dungeon');
 const { itemById, weaponClassOf } = require('../data/items');
@@ -62,10 +62,13 @@ router.get('/loadout', async (req, res) => {
     const available = attacksForClass(weaponClass);
     const availableIds = new Set(available.map(a => a.id));
 
-    // Prefer stored slot if still usable, otherwise fall back to default order.
+    // Prefer stored slot if still usable, otherwise fall back to a
+    // weapon-aware default (so swapping weapons lights up the new movepool
+    // immediately instead of leaving the player with Punch/Kick).
+    const fallback = defaultLoadoutFor(weaponClass);
     const slots = [];
     for (let i = 0; i < 4; i++) {
-      const candidate = stored[i] && availableIds.has(stored[i]) ? stored[i] : DEFAULT_LOADOUT[i];
+      const candidate = stored[i] && availableIds.has(stored[i]) ? stored[i] : fallback[i];
       slots.push(candidate);
     }
 
@@ -184,7 +187,9 @@ router.post('/treasure', async (req, res) => {
   try {
     const { tier } = req.body;
     const t = Math.max(1, Math.min(5, parseInt(tier) || 1));
-    const gold = 40 + t * 30 + Math.floor(Math.random() * 20);
+    // Reduced from the old 40+30t formula — dungeon gold should accent the
+    // economy, not replace habit gold as the main income source.
+    const gold = 15 + t * 10 + Math.floor(Math.random() * 8);
     await pool.query(
       'UPDATE users SET gold = gold + $1, lifetime_gold = COALESCE(lifetime_gold, 0) + $1 WHERE id = $2',
       [gold, req.userId]

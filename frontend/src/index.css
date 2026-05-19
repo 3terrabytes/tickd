@@ -420,3 +420,53 @@ input {
   animation: hp-flash 0.4s ease-out;
 }
 
+/* Pet companion attack lunge */
+@keyframes pet-attack {
+  0%   { transform: translateX(0) scale(1) rotate(0); }
+  35%  { transform: translateX(60px) scale(1.25) rotate(-15deg); }
+  60%  { transform: translateX(60px) scale(1.25) rotate(-15deg); }
+  100% { transform: translateX(0) scale(1) rotate(0); }
+}
+.pet-attack { animation: pet-attack 0.55s ease-out; }
+
+/* Pet idle bob — slightly out of sync with player */
+@keyframes pet-bob {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-3px); }
+}
+.pet-idle { animation: pet-bob 1.4s ease-in-out infinite; }
+
+/* Status effect icons (burn/poison/stun) above the monster */
+@keyframes status-pulse {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.15); }
+}
+.status-icon { animation: status-pulse 1.5s ease-in-out infinite; }
+
+@keyframes status-tick {
+  0%   { transform: translate(-50%, 0); opacity: 0; }
+  30%  { transform: translate(-50%, -10px); opacity: 1; }
+  100% { transform: translate(-50%, -36px); opacity: 0; }
+}
+.status-tick {
+  position: absolute; top: 30%; left: 50%;
+  font-family: 'Cinzel', serif; font-weight: 700; font-size: 22px;
+  text-shadow: 0 0 8px rgba(0,0,0,0.9), 2px 2px 0 rgba(0,0,0,0.7);
+  pointer-events: none;
+  animation: status-tick 0.9s ease-out forwards;
+}
+
+/* Monster intent badge — fades in/out as it changes between turns */
+@keyframes intent-in {
+  0%   { transform: translateY(-8px); opacity: 0; }
+  100% { transform: translateY(0);    opacity: 1; }
+}
+.monster-intent {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 4px 10px; border-radius: 99;
+  background: rgba(0,0,0,0.6);
+  font-size: 12px; font-weight: 700;
+  border: 1px solid rgba(255,255,255,0.15);
+  animation: intent-in 0.3s ease-out;
+}
+

@@ -25,7 +25,7 @@ const ATTACKS = [
 
   // ── staff ─────────────────────────────────────────────────────────────
   { id: 'magic_missile', name: 'Magic Missile',  weaponClass: 'staff',  power: 16, cooldown: 0, element: 'arcane',   animation: 'missile', emoji: '✨', desc: 'Arcane projectile. Never misses.' },
-  { id: 'fireball',      name: 'Fireball',       weaponClass: 'staff',  power: 28, cooldown: 2, element: 'fire',     animation: 'fire',    emoji: '🔥', desc: 'A roaring sphere of flame.' },
+  { id: 'fireball',      name: 'Fireball',       weaponClass: 'staff',  power: 24, cooldown: 2, element: 'fire',     animation: 'fire',    emoji: '🔥', desc: 'A roaring sphere of flame. Applies BURN.', tag: 'burn' },
   { id: 'frost_nova',    name: 'Frost Nova',     weaponClass: 'staff',  power: 20, cooldown: 2, element: 'ice',      animation: 'frost',   emoji: '❄️', desc: 'A shockwave of cold.' },
   { id: 'mend',          name: 'Mend',           weaponClass: 'staff',  power: 0,  cooldown: 3, element: 'holy',     animation: 'heal',    emoji: '💚', desc: 'Restore 40 HP.', tag: 'heal', heal: 40 },
 
@@ -33,7 +33,7 @@ const ATTACKS = [
   { id: 'quick_shot',    name: 'Quick Shot',     weaponClass: 'bow',    power: 13, cooldown: 0, element: 'physical', animation: 'arrow',   emoji: '🏹', desc: 'A swift, low-commitment arrow.' },
   { id: 'aimed_shot',    name: 'Aimed Shot',     weaponClass: 'bow',    power: 30, cooldown: 3, element: 'physical', animation: 'arrow',   emoji: '🎯', desc: 'Slow draw, devastating hit.' },
   { id: 'volley',        name: 'Volley',         weaponClass: 'bow',    power: 22, cooldown: 2, element: 'physical', animation: 'volley',  emoji: '🌧️', desc: 'A rain of arrows.' },
-  { id: 'storm_shot',    name: 'Storm Shot',     weaponClass: 'bow',    power: 24, cooldown: 2, element: 'lightning',animation: 'lightning',emoji: '⚡', desc: 'Charged with crackling lightning.' },
+  { id: 'storm_shot',    name: 'Storm Shot',     weaponClass: 'bow',    power: 22, cooldown: 2, element: 'lightning',animation: 'lightning',emoji: '⚡', desc: 'Crackling lightning. Chance to STUN.', tag: 'stun' },
 
   // ── axe ───────────────────────────────────────────────────────────────
   { id: 'cleave',        name: 'Cleave',         weaponClass: 'axe',    power: 18, cooldown: 0, element: 'physical', animation: 'slash',   emoji: '🪓', desc: 'A brutal downward chop.' },
@@ -43,12 +43,12 @@ const ATTACKS = [
   // ── dagger ────────────────────────────────────────────────────────────
   { id: 'stab',          name: 'Stab',           weaponClass: 'dagger', power: 12, cooldown: 0, element: 'physical', animation: 'dash',    emoji: '🗡️', desc: 'A quick, precise jab.' },
   { id: 'backstab',      name: 'Backstab',       weaponClass: 'dagger', power: 28, cooldown: 3, element: 'physical', animation: 'dash',    emoji: '🌑', desc: 'Strike from the shadows.' },
-  { id: 'poison_dart',   name: 'Poison Dart',    weaponClass: 'dagger', power: 16, cooldown: 1, element: 'poison',   animation: 'poison',  emoji: '☠️', desc: 'Weakens the target with venom.' },
+  { id: 'poison_dart',   name: 'Poison Dart',    weaponClass: 'dagger', power: 14, cooldown: 1, element: 'poison',   animation: 'poison',  emoji: '☠️', desc: 'Venomous. Applies POISON for 3 turns.', tag: 'poison' },
 
   // ── hammer ────────────────────────────────────────────────────────────
   { id: 'smash',         name: 'Smash',          weaponClass: 'hammer', power: 20, cooldown: 0, element: 'physical', animation: 'heavy',   emoji: '🔨', desc: 'Crushing overhead blow.' },
   { id: 'shockwave',     name: 'Shockwave',      weaponClass: 'hammer', power: 26, cooldown: 2, element: 'lightning',animation: 'shockwave',emoji: '💥', desc: 'Ground-shaking impact.' },
-  { id: 'thunderclap',   name: 'Thunderclap',    weaponClass: 'hammer', power: 32, cooldown: 3, element: 'lightning',animation: 'lightning',emoji: '⚡', desc: 'Storm-fueled finisher.' },
+  { id: 'thunderclap',   name: 'Thunderclap',    weaponClass: 'hammer', power: 28, cooldown: 3, element: 'lightning',animation: 'lightning',emoji: '⚡', desc: 'Storm-fueled finisher. STUNS the target.', tag: 'stun' },
 
   // ── wand ──────────────────────────────────────────────────────────────
   { id: 'bolt',          name: 'Arcane Bolt',    weaponClass: 'wand',   power: 14, cooldown: 0, element: 'arcane',   animation: 'missile', emoji: '✨', desc: 'A focused beam of magic.' },
@@ -78,4 +78,24 @@ const attacksForClass = (weaponClass) => {
 // The four attacks new players start with — usable regardless of gear.
 const DEFAULT_LOADOUT = ['punch', 'kick', 'guard', 'rally'];
 
-module.exports = { ATTACKS, attackById, attacksForClass, DEFAULT_LOADOUT };
+// Build a sensible default loadout for a given weapon class. When the user
+// equips a weapon (e.g. a sword), they should immediately get the signature
+// moves for that class plus a Rally (heal) slot, so the weapon swap feels
+// meaningful instead of all four slots staying as Punch/Kick.
+const defaultLoadoutFor = (weaponClass) => {
+  if (!weaponClass) return DEFAULT_LOADOUT;
+  const classMoves = ATTACKS
+    .filter(a => a.weaponClass === weaponClass)
+    .sort((a, b) => (a.cooldown || 0) - (b.cooldown || 0))
+    .slice(0, 3)
+    .map(a => a.id);
+  // If somehow a class has fewer than 3 moves, fall back to universal fillers.
+  while (classMoves.length < 3) {
+    const filler = DEFAULT_LOADOUT[classMoves.length];
+    if (filler && !classMoves.includes(filler)) classMoves.push(filler);
+    else break;
+  }
+  return [...classMoves, 'rally'];
+};
+
+module.exports = { ATTACKS, attackById, attacksForClass, DEFAULT_LOADOUT, defaultLoadoutFor };

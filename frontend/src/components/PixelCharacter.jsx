@@ -67,12 +67,12 @@ export default function PixelCharacter({
   const isEpicArmor      = armor && armor.rarity === 'epic';
 
   return (
-    <div style={{ width: size, height: size, imageRendering: 'pixelated', flexShrink: 0 }}>
+    <div style={{ width: size, height: size, imageRendering: 'pixelated', flexShrink: 0, overflow: 'visible' }}>
       <svg
         width={size} height={size}
         viewBox="0 0 80 80"
         xmlns="http://www.w3.org/2000/svg"
-        style={{ imageRendering: 'pixelated', display: 'block' }}
+        style={{ imageRendering: 'pixelated', display: 'block', overflow: 'visible' }}
         shapeRendering="crispEdges"
       >
         {/* ── BANNER aura (behind everything) ───────────────────────────── */}
@@ -240,10 +240,13 @@ export default function PixelCharacter({
           </g>
         )}
 
-        {/* ── COMPANION (pet) — pixel-art, left of body, same ground plane */}
+        {/* ── COMPANION (pet) — pixel-art, left of body, same ground plane.
+            Scaled 1.5x around (14, 74) so pets read at a more game-y size. */}
         {companion && (
           <g className={`pet pet-${companion.id}${cheering ? ' pet-cheer' : ''}`}
-             shapeRendering="crispEdges">
+             shapeRendering="crispEdges"
+             transform="translate(-7 -37) scale(1.5)"
+             style={{ transformOrigin: 'center' }}>
             <title>{companion.name}: {companion.desc}</title>
             <ellipse cx="14" cy="74" rx="6" ry="1.5" fill="rgba(0,0,0,0.35)" />
             {renderPet(companion.id, cheering)}

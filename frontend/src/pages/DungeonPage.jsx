@@ -89,6 +89,13 @@ export default function DungeonPage() {
   const [defenseBuff, setDefenseBuff] = useState(null);   // potion-applied defense mult
   const [luckyCharm, setLuckyCharm] = useState(false);    // bonus gold on next treasure
 
+  // Status effects on the monster: { burn: turnsRemaining, poison: turnsRemaining, stun: turnsRemaining }
+  const [statuses, setStatuses] = useState({});
+  // Monster's next move — telegraphed Slay-the-Spire style so the player can plan.
+  const [intent, setIntent] = useState(null);  // { kind, power, label, icon }
+  const [turnCount, setTurnCount] = useState(0);
+  const [petAnim, setPetAnim] = useState('');
+
   // Inventory
   const [potions, setPotions] = useState([]);    // [{id, name, emoji, ...}, ...]
   const [shopOffer, setShopOffer] = useState([]); // potions offered in current shop
@@ -203,9 +210,40 @@ export default function DungeonPage() {
     }
   };
 
+  // Pet damage scaling — equipped companion adds free damage every turn.
+  // Tuned so a Mini Dragon hits harder than a Habit Cat without trivialising
+  // boss fights.
+  const PET_DMG = { common: 4, rare: 8, epic: 14, legendary: 22 };
+  const petBaseDamage = () => {
+    const pet = inventory && inventory.equipped && inventory.equipped.companion;
+    if (!pet) return 0;
+    return PET_DMG[pet.rarity] || 4;
+  };
+
+  // Pick the next monster intent. Pattern: heavy every 3rd turn, defend
+  // every 4th turn (mid+ tiers), otherwise basic strike.
+  const computeIntent = (monster, t) => {
+    if (t > 0 && t % 3 === 0) {
+      return { kind: 'heavy', power: Math.round(monster.power * 1.6),
+        label: `${Math.round(monster.power * 1.6)}`, icon: '💥', tone: '#f97316' };
+    }
+    if (monster && monster.tier >= 3 && t > 0 && t % 4 === 0) {
+      return { kind: 'defend', power: 0, label: 'Defend', icon: '🛡', tone: '#60a5fa' };
+    }
+    return { kind: 'strike', power: monster.power, label: `${monster.power}`, icon: '⚔️', tone: '#fca5a5' };
+  };
+
   const enterBattle = async (node) => {
+    if (!node || !node.monster) {
+      addLog('⚠ Missing monster — returning to map.');
+      setPhase('map');
+      return;
+    }
     setMonsterHp(node.monster.hp);
     setCooldowns({ 0: 0, 1: 0, 2: 0, 3: 0 });
+    setStatuses({});
+    setTurnCount(0);
+    setIntent(computeIntent(node.monster, 0));
     addLog(`🚪 You enter a chamber.`);
     setPhase('battle');
     await showEncounter(node.monster);
@@ -274,10 +312,13 @@ export default function DungeonPage() {
   // ── Combat ───────────────────────────────────────────────────────
   const useAttack = async (slotIdx) => {
     if (phase !== 'battle' || busy) return;
-    if (cooldowns[slotIdx] > 0) return;
+    if (!loadout || !loadout.slotDetails) return;
+    const cd = cooldowns ? (cooldowns[slotIdx] || 0) : 0;
+    if (cd > 0) return;
     const attack = loadout.slotDetails[slotIdx];
     if (!attack) return;
-    const monster = activeNode.monster;
+    const monster = activeNode && activeNode.monster;
+    if (!monster) return;
 
     setBusy(true);
 
@@ -294,7 +335,6 @@ export default function DungeonPage() {
     await sleep(350);
 
     let newMonsterHp = monsterHp;
-    let dealt = 0;
     if (attack.tag === 'heal') {
       const heal = attack.heal || 30;
       setHp(prev => Math.min(maxHp, prev + heal));
@@ -309,7 +349,6 @@ export default function DungeonPage() {
     } else {
       const mult = strengthBuff ? strengthBuff : 1;
       const { dmg, crit } = rollDamage(attack, loadout.magic, mult);
-      dealt = dmg;
       setMonsterAnim('battle-monster-hurt');
       popDamage('monster', dmg, { crit });
       if (crit || ['heavy', 'shockwave', 'lightning'].includes(attack.animation)) shake();
@@ -319,7 +358,17 @@ export default function DungeonPage() {
       addLog(`${attack.emoji} ${attack.name} hits ${monster.name} for ${dmg}${crit ? ' (CRIT!)' : ''}${buffStr}.`);
       if (strengthBuff) setStrengthBuff(null);
 
-      if (attack.tag === 'lifesteal') {
+      // Apply status effects from this attack
+      if (attack.tag === 'burn' && newMonsterHp > 0) {
+        setStatuses(s => ({ ...s, burn: 3 }));
+        addLog(`🔥 ${monster.name} is BURNING.`);
+      } else if (attack.tag === 'poison' && newMonsterHp > 0) {
+        setStatuses(s => ({ ...s, poison: 3 }));
+        addLog(`☠️ ${monster.name} is POISONED.`);
+      } else if (attack.tag === 'stun' && newMonsterHp > 0) {
+        setStatuses(s => ({ ...s, stun: 1 }));
+        addLog(`⚡ ${monster.name} is STUNNED — they'll lose their next turn.`);
+      } else if (attack.tag === 'lifesteal') {
         const lifesteal = Math.round(dmg / 2);
         setHp(prev => Math.min(maxHp, prev + lifesteal));
         popDamage('player', lifesteal, { heal: true });
@@ -329,15 +378,70 @@ export default function DungeonPage() {
       await sleep(550);
       setPlayerAnim('');
       setMonsterAnim('');
+    }
 
+    // Pet companion auto-attack (after the player's attack, if monster still alive)
+    const petDmg = petBaseDamage();
+    if (petDmg > 0 && newMonsterHp > 0 && attack.tag !== 'heal' && attack.tag !== 'defend') {
+      setPetAnim('pet-attack');
+      await sleep(180);
+      setMonsterAnim('battle-monster-hurt');
+      popDamage('monster', petDmg, {});
+      newMonsterHp = Math.max(0, newMonsterHp - petDmg);
+      setMonsterHp(newMonsterHp);
+      const petName = (inventory && inventory.equipped && inventory.equipped.companion && inventory.equipped.companion.name) || 'Companion';
+      addLog(`${(inventory.equipped.companion && inventory.equipped.companion.emoji) || '🐾'} ${petName} pounces for ${petDmg}!`);
+      await sleep(450);
+      setPetAnim('');
+      setMonsterAnim('');
+    }
+
+    // Monster defeat check — covers normal hits, pet kills, or DoT kills below.
+    if (newMonsterHp <= 0) {
+      setMonsterAnim('battle-monster-die');
+      setLootDrop({ xp: monster.xp, gold: monster.gold, id: Date.now() });
+      addLog(`💀 ${monster.name} falls!`);
+      await sleep(700);
+      flashBanner('VICTORY!', '#fde047', 1100);
+      await sleep(600);
+      try {
+        const res = await api.dungeon.reward(monster.id);
+        countUpReward(res.xp, res.gold);
+        await refreshUser();
+      } catch (err) { addLog('⚠ ' + err.message); }
+      setPhase('rewarded');
+      setBusy(false);
+      return;
+    }
+
+    setCooldowns(c => ({ ...(c || {}), [slotIdx]: attack.cooldown || 0 }));
+
+    // Apply status-effect ticks (burn/poison) at the start of monster's turn
+    let dotDmg = 0;
+    const nextStatuses = { ...statuses };
+    if ((nextStatuses.burn || 0) > 0) {
+      dotDmg += 6;
+      nextStatuses.burn -= 1;
+      popDamage('monster', 6, {});
+      addLog(`🔥 Burn ticks: -6 HP.`);
+    }
+    if ((nextStatuses.poison || 0) > 0) {
+      dotDmg += 4;
+      nextStatuses.poison -= 1;
+      popDamage('monster', 4, {});
+      addLog(`☠️ Poison ticks: -4 HP.`);
+    }
+    if (dotDmg > 0) {
+      newMonsterHp = Math.max(0, newMonsterHp - dotDmg);
+      setMonsterHp(newMonsterHp);
+      await sleep(400);
       if (newMonsterHp <= 0) {
         setMonsterAnim('battle-monster-die');
         setLootDrop({ xp: monster.xp, gold: monster.gold, id: Date.now() });
-        addLog(`💀 ${monster.name} falls!`);
+        addLog(`💀 ${monster.name} succumbs to wounds.`);
         await sleep(700);
         flashBanner('VICTORY!', '#fde047', 1100);
         await sleep(600);
-        // Claim reward
         try {
           const res = await api.dungeon.reward(monster.id);
           countUpReward(res.xp, res.gold);
@@ -348,45 +452,69 @@ export default function DungeonPage() {
         return;
       }
     }
+    setStatuses(nextStatuses);
 
-    setCooldowns(c => ({ ...c, [slotIdx]: attack.cooldown || 0 }));
+    // Resolve monster's intent (or skip if stunned)
+    const stunned = (nextStatuses.stun || 0) > 0;
+    const currentIntent = intent || computeIntent(monster, turnCount);
 
-    // Monster turn
     await sleep(300);
-    setMonsterAnim('battle-monster-attack');
-    await sleep(250);
-    let dmg = monsterDamage(monster, loadout.armor, defenseBuff || 1);
-    if (guarding) { dmg = Math.round(dmg * 0.4); setGuarding(false); }
-    if (defenseBuff) { setDefenseBuff(null); }
-    setPlayerAnim('battle-player-hurt');
-    popDamage('player', dmg);
-    setHp(prev => {
-      const next = Math.max(0, prev - dmg);
-      if (next <= 0) {
-        // Defeat path is handled below by reading hp through state — but
-        // we also schedule the UI swap immediately based on the new value.
-        (async () => {
-          shake(600);
-          flashBanner('DEFEAT', '#fca5a5', 1400);
-          addLog('💀 You fall. The run ends here.');
-          await sleep(900);
-          setPhase('dead');
-          setBusy(false);
-        })();
-      }
-      return next;
-    });
-    addLog(`${monster.sprite} ${monster.name} strikes for ${dmg}.`);
-    await sleep(500);
-    setMonsterAnim('');
-    setPlayerAnim('');
-    if (dmg > 15) shake(350);
+    if (stunned) {
+      setStatuses(s => ({ ...s, stun: 0 }));
+      addLog(`⚡ ${monster.name} is stunned and misses its turn!`);
+      await sleep(450);
+    } else if (currentIntent.kind === 'defend') {
+      // Monster defends — show animation, no damage this turn.
+      addLog(`🛡 ${monster.name} braces — incoming dmg reduced next turn.`);
+      setDefenseBuff(0.4); // pseudo-debuff — actually buffs their next defense
+      // We don't actually use this; instead increase damage they ABSORB next swing.
+      // Simpler: just skip their offense this turn.
+      await sleep(400);
+    } else {
+      setMonsterAnim('battle-monster-attack');
+      await sleep(250);
+      const intentPower = currentIntent.power;
+      const intentMultiplier = currentIntent.kind === 'heavy' ? 1 : 1; // power already baked in
+      let dmg = monsterDamage({ ...monster, power: intentPower }, loadout.armor, defenseBuff || 1);
+      if (guarding) { dmg = Math.round(dmg * 0.4); setGuarding(false); }
+      if (defenseBuff && defenseBuff !== 0.4) { setDefenseBuff(null); }
+      setPlayerAnim('battle-player-hurt');
+      popDamage('player', dmg, { crit: currentIntent.kind === 'heavy' });
+      setHp(prev => {
+        const next = Math.max(0, prev - dmg);
+        if (next <= 0) {
+          (async () => {
+            shake(600);
+            flashBanner('DEFEAT', '#fca5a5', 1400);
+            addLog('💀 You fall. The run ends here.');
+            await sleep(900);
+            setPhase('dead');
+            setBusy(false);
+          })();
+        }
+        return next;
+      });
+      addLog(`${monster.sprite} ${monster.name} ${currentIntent.kind === 'heavy' ? 'crashes down' : 'strikes'} for ${dmg}.`);
+      await sleep(500);
+      setMonsterAnim('');
+      setPlayerAnim('');
+      if (dmg > 15 || currentIntent.kind === 'heavy') shake(350);
+    }
 
+    // Tick down cooldowns + compute next intent
     setCooldowns(c => {
       const out = {};
-      for (let i = 0; i < 4; i++) out[i] = Math.max(0, (i === slotIdx ? (attack.cooldown || 0) : (c[i] || 0)) - (i === slotIdx ? 0 : 1));
+      for (let i = 0; i < 4; i++) {
+        const cur = c ? (c[i] || 0) : 0;
+        out[i] = i === slotIdx
+          ? (attack.cooldown || 0)
+          : Math.max(0, cur - 1);
+      }
       return out;
     });
+    const nextTurn = turnCount + 1;
+    setTurnCount(nextTurn);
+    setIntent(computeIntent(monster, nextTurn));
 
     setBusy(false);
   };
@@ -605,10 +733,36 @@ export default function DungeonPage() {
                 <HpBar value={hp} max={maxHp} color="#10b981" />
               </div>
               <div style={{ flex: 1, textAlign: 'right' }}>
-                <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 3, color: isBoss ? '#fde047' : isElite ? '#fb923c' : '#fca5a5' }}>
-                  {isBoss && '👑 '}{isElite && '🔥 '}{monster.name} <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>· T{monster.tier}</span>
+                <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 3, color: isBoss ? '#fde047' : isElite ? '#fb923c' : '#fca5a5', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6 }}>
+                  {/* Monster intent badge — telegraphs the upcoming move */}
+                  {phase === 'battle' && intent && (
+                    <span className="monster-intent" style={{ color: intent.tone }}>
+                      {intent.icon} {intent.label}
+                    </span>
+                  )}
+                  <span>{isBoss && '👑 '}{isElite && '🔥 '}{monster.name} <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>· T{monster.tier}</span></span>
                 </div>
                 <HpBar value={monsterHp} max={monster.hp} color={isBoss ? '#fbbf24' : isElite ? '#fb923c' : '#ef4444'} />
+                {/* Active status effects on the monster */}
+                {(statuses.burn > 0 || statuses.poison > 0 || statuses.stun > 0) && (
+                  <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end', marginTop: 4 }}>
+                    {statuses.burn > 0 && (
+                      <span className="status-icon" style={{ fontSize: 14, padding: '2px 6px', background: 'rgba(249,115,22,0.2)', border: '1px solid #ea580c', borderRadius: 6 }}>
+                        🔥 {statuses.burn}
+                      </span>
+                    )}
+                    {statuses.poison > 0 && (
+                      <span className="status-icon" style={{ fontSize: 14, padding: '2px 6px', background: 'rgba(34,197,94,0.2)', border: '1px solid #22c55e', borderRadius: 6 }}>
+                        ☠️ {statuses.poison}
+                      </span>
+                    )}
+                    {statuses.stun > 0 && (
+                      <span className="status-icon" style={{ fontSize: 14, padding: '2px 6px', background: 'rgba(253,224,71,0.2)', border: '1px solid #fde047', borderRadius: 6 }}>
+                        ⚡ STUN
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -616,21 +770,34 @@ export default function DungeonPage() {
               <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 20,
                 background: 'radial-gradient(ellipse at 50% 100%, rgba(0,0,0,0.6) 0%, transparent 70%)' }} />
 
-              <div className={`${playerAnim || 'battle-idle'}`} style={{ position: 'relative' }}>
-                <PixelCharacter appearance={user || {}} equipped={inventory.equipped} size={130} />
-                {damages.filter(d => d.target === 'player').map(d => (
-                  <div key={d.id} className={`battle-damage ${d.heal ? 'heal' : ''} ${d.crit ? 'crit' : ''}`}>
-                    {d.heal ? `+${d.value}` : d.value}
+              <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, position: 'relative' }}>
+                <div className={`${playerAnim || 'battle-idle'}`} style={{ position: 'relative' }}>
+                  <PixelCharacter appearance={user || {}} equipped={inventory.equipped} size={130} />
+                  {damages.filter(d => d.target === 'player').map(d => (
+                    <div key={d.id} className={`battle-damage ${d.heal ? 'heal' : ''} ${d.crit ? 'crit' : ''}`}>
+                      {d.heal ? `+${d.value}` : d.value}
+                    </div>
+                  ))}
+                  {guarding && (
+                    <div style={{ position: 'absolute', inset: -10, borderRadius: '50%',
+                      border: '2px solid #60a5fa', boxShadow: '0 0 18px #60a5fa88',
+                      animation: 'bob 1.2s ease-in-out infinite' }} />
+                  )}
+                  {strengthBuff && (
+                    <div style={{ position: 'absolute', top: -10, left: '50%', transform: 'translateX(-50%)',
+                      fontSize: 22, animation: 'bob 1s ease-in-out infinite' }}>🧉</div>
+                  )}
+                </div>
+                {/* Pet companion fighting alongside the player */}
+                {inventory && inventory.equipped && inventory.equipped.companion && (
+                  <div className={petAnim || 'pet-idle'} style={{
+                    fontSize: 56, lineHeight: 1,
+                    filter: 'drop-shadow(0 4px 8px rgba(0,0,0,0.5))',
+                    position: 'relative',
+                  }}
+                  title={inventory.equipped.companion.name}>
+                    {inventory.equipped.companion.emoji}
                   </div>
-                ))}
-                {guarding && (
-                  <div style={{ position: 'absolute', inset: -10, borderRadius: '50%',
-                    border: '2px solid #60a5fa', boxShadow: '0 0 18px #60a5fa88',
-                    animation: 'bob 1.2s ease-in-out infinite' }} />
-                )}
-                {strengthBuff && (
-                  <div style={{ position: 'absolute', top: -10, left: '50%', transform: 'translateX(-50%)',
-                    fontSize: 22, animation: 'bob 1s ease-in-out infinite' }}>🧉</div>
                 )}
               </div>
 
