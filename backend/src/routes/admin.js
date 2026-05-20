@@ -3,6 +3,8 @@ const { pool } = require('../db');
 const auth = require('../middleware/auth');
 const adminOnly = require('../middleware/admin');
 const { ITEMS, itemById } = require('../data/items');
+const { ADMIN_PERMS, ALL_PERMS, requirePerm } = require('../utils/adminPerms');
+const { logAction } = require('../utils/adminLog');
 const router = express.Router();
 
 router.use(auth);
@@ -11,7 +13,8 @@ router.use(adminOnly);
 const USER_FIELDS = `
   id, username, email, xp, level, gold, avatar_color,
   avatar_skin, avatar_hair, avatar_eyes, avatar_hair_style, avatar_gender, avatar_beard,
-  is_admin, suspension_type, suspension_reason, suspended_until, suspended_at, suspended_by,
+  is_admin, is_master_admin, admin_perms,
+  suspension_type, suspension_reason, suspended_until, suspended_at, suspended_by,
   created_at
 `;
 
@@ -61,7 +64,7 @@ router.get('/users/:id/inventory', async (req, res) => {
 });
 
 // Update xp / gold / level
-router.patch('/users/:id', async (req, res) => {
+router.patch('/users/:id', requirePerm('manage_users'), async (req, res) => {
   const { xp, gold, level } = req.body;
   const fields = [];
   const params = [];
@@ -78,6 +81,7 @@ router.patch('/users/:id', async (req, res) => {
       params
     );
     if (!rows[0]) return res.status(404).json({ error: 'Not found' });
+    logAction(req, 'update_stats', parseInt(req.params.id), { xp, gold, level });
     res.json(rows[0]);
   } catch (err) {
     console.error('admin patch user error', err);
@@ -86,7 +90,7 @@ router.patch('/users/:id', async (req, res) => {
 });
 
 // Grant item
-router.post('/users/:id/items/:itemId', async (req, res) => {
+router.post('/users/:id/items/:itemId', requirePerm('grant_items'), async (req, res) => {
   const item = itemById(req.params.itemId);
   if (!item) return res.status(404).json({ error: 'Unknown item' });
   try {
@@ -95,6 +99,7 @@ router.post('/users/:id/items/:itemId', async (req, res) => {
        ON CONFLICT (user_id, item_id) DO NOTHING`,
       [req.params.id, item.id]
     );
+    logAction(req, 'grant_item', parseInt(req.params.id), { itemId: item.id, itemName: item.name });
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: 'Server error' });
@@ -102,7 +107,7 @@ router.post('/users/:id/items/:itemId', async (req, res) => {
 });
 
 // Remove item (and unequip if equipped in any slot)
-router.delete('/users/:id/items/:itemId', async (req, res) => {
+router.delete('/users/:id/items/:itemId', requirePerm('grant_items'), async (req, res) => {
   try {
     await pool.query(
       'DELETE FROM user_inventory WHERE user_id = $1 AND item_id = $2',
@@ -114,6 +119,7 @@ router.delete('/users/:id/items/:itemId', async (req, res) => {
         [req.params.id, req.params.itemId]
       );
     }
+    logAction(req, 'remove_item', parseInt(req.params.id), { itemId: req.params.itemId });
     res.json({ success: true });
   } catch {
     res.status(500).json({ error: 'Server error' });
@@ -121,7 +127,7 @@ router.delete('/users/:id/items/:itemId', async (req, res) => {
 });
 
 // Equip an item on a user (admin can equip any item the user owns)
-router.post('/users/:id/equip/:itemId', async (req, res) => {
+router.post('/users/:id/equip/:itemId', requirePerm('equip_users'), async (req, res) => {
   const item = itemById(req.params.itemId);
   if (!item) return res.status(404).json({ error: 'Unknown item' });
   if (!EQUIP_SLOTS.includes(item.type)) return res.status(400).json({ error: 'Not equippable' });
@@ -137,11 +143,12 @@ router.post('/users/:id/equip/:itemId', async (req, res) => {
      ON CONFLICT (user_id) DO UPDATE SET ${item.type} = EXCLUDED.${item.type}`,
     [req.params.id, item.id]
   );
+  logAction(req, 'equip_item', parseInt(req.params.id), { itemId: item.id, slot: item.type });
   res.json({ success: true });
 });
 
 // Unequip a slot for a user
-router.delete('/users/:id/equip/:slot', async (req, res) => {
+router.delete('/users/:id/equip/:slot', requirePerm('equip_users'), async (req, res) => {
   const slot = req.params.slot;
   if (!EQUIP_SLOTS.includes(slot)) return res.status(400).json({ error: 'Invalid slot' });
   await pool.query(
@@ -149,13 +156,14 @@ router.delete('/users/:id/equip/:slot', async (req, res) => {
      ON CONFLICT (user_id) DO UPDATE SET ${slot} = NULL`,
     [req.params.id]
   );
+  logAction(req, 'unequip_slot', parseInt(req.params.id), { slot });
   res.json({ success: true });
 });
 
 // Suspend account: warn | temp | perm
 // Temp duration can be specified as `minutes`, `hours`, or `days` — whichever
 // is most convenient for the caller. They stack (so 1 day + 2 hours works).
-router.post('/users/:id/suspend', async (req, res) => {
+router.post('/users/:id/suspend', requirePerm('suspend_users'), async (req, res) => {
   const { type, reason, days, hours, minutes } = req.body;
   if (!['warn', 'temp', 'perm'].includes(type)) {
     return res.status(400).json({ error: 'Invalid suspension type' });
@@ -189,6 +197,7 @@ router.post('/users/:id/suspend', async (req, res) => {
       [type, reason || null, until, req.userId, req.params.id]
     );
     if (!rows[0]) return res.status(404).json({ error: 'Not found' });
+    logAction(req, `suspend_${type}`, parseInt(req.params.id), { type, reason, until });
     res.json(rows[0]);
   } catch (err) {
     console.error('admin suspend error', err);
@@ -197,7 +206,7 @@ router.post('/users/:id/suspend', async (req, res) => {
 });
 
 // Unsuspend
-router.post('/users/:id/unsuspend', async (req, res) => {
+router.post('/users/:id/unsuspend', requirePerm('suspend_users'), async (req, res) => {
   try {
     const { rows } = await pool.query(
       `UPDATE users SET
@@ -208,14 +217,15 @@ router.post('/users/:id/unsuspend', async (req, res) => {
       [req.params.id]
     );
     if (!rows[0]) return res.status(404).json({ error: 'Not found' });
+    logAction(req, 'unsuspend', parseInt(req.params.id));
     res.json(rows[0]);
   } catch {
     res.status(500).json({ error: 'Server error' });
   }
 });
 
-// Toggle admin flag
-router.post('/users/:id/admin', async (req, res) => {
+// Toggle admin flag — master / manage_admins only
+router.post('/users/:id/admin', requirePerm('manage_admins'), async (req, res) => {
   const makeAdmin = !!req.body.is_admin;
   if (parseInt(req.params.id) === req.userId && !makeAdmin) {
     return res.status(400).json({ error: "You can't demote yourself" });
@@ -226,11 +236,77 @@ router.post('/users/:id/admin', async (req, res) => {
       [makeAdmin, req.params.id]
     );
     if (!rows[0]) return res.status(404).json({ error: 'Not found' });
+    logAction(req, makeAdmin ? 'grant_admin' : 'revoke_admin', parseInt(req.params.id));
     res.json(rows[0]);
   } catch {
     res.status(500).json({ error: 'Server error' });
   }
 });
+
+// ── HALF-ADMIN PERMS (master only) ─────────────────────────────────────
+// Master admin sets/changes the granular `admin_perms` array for any user.
+// To make someone a "half-admin", pass `perms: [...]` with one or more of
+// the keys listed in adminPerms.js.
+router.post('/users/:id/perms', async (req, res) => {
+  try {
+    // Master-only check (we don't reuse requirePerm so the message is clearer).
+    const { rows: meRows } = await pool.query(
+      'SELECT username, is_master_admin FROM users WHERE id = $1',
+      [req.userId]
+    );
+    const me = meRows[0];
+    const isMaster = me?.is_master_admin || (me?.username || '').toLowerCase() === 'thedevs';
+    if (!isMaster) return res.status(403).json({ error: 'Master admin only' });
+
+    let { perms } = req.body;
+    if (!Array.isArray(perms)) perms = [];
+    // Strip anything that isn't a real perm key.
+    perms = perms.filter(p => ALL_PERMS.includes(p));
+
+    const { rows } = await pool.query(
+      `UPDATE users SET admin_perms = $1 WHERE id = $2 RETURNING ${USER_FIELDS}`,
+      [perms, req.params.id]
+    );
+    if (!rows[0]) return res.status(404).json({ error: 'Not found' });
+    logAction(req, 'set_perms', parseInt(req.params.id), { perms });
+    res.json(rows[0]);
+  } catch (err) {
+    console.error('admin set perms error', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ── AUDIT LOG (view_logs perm) ─────────────────────────────────────────
+router.get('/logs', requirePerm('view_logs'), async (req, res) => {
+  try {
+    const adminFilter  = req.query.admin  ? parseInt(req.query.admin)  : null;
+    const targetFilter = req.query.target ? parseInt(req.query.target) : null;
+    const actionFilter = req.query.action || null;
+    const limit  = Math.min(parseInt(req.query.limit)  || 100, 500);
+    const offset = parseInt(req.query.offset) || 0;
+
+    const params = [];
+    const where  = [];
+    if (adminFilter)  { params.push(adminFilter);  where.push(`admin_id  = $${params.length}`); }
+    if (targetFilter) { params.push(targetFilter); where.push(`target_id = $${params.length}`); }
+    if (actionFilter) { params.push(actionFilter); where.push(`action    = $${params.length}`); }
+    params.push(limit);  const limitParam  = `$${params.length}`;
+    params.push(offset); const offsetParam = `$${params.length}`;
+
+    const sql = `SELECT * FROM admin_logs
+                 ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
+                 ORDER BY created_at DESC
+                 LIMIT ${limitParam} OFFSET ${offsetParam}`;
+    const { rows } = await pool.query(sql, params);
+    res.json(rows);
+  } catch (err) {
+    console.error('admin logs error', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Catalog of valid perm keys — used by the UI to render the toggle grid.
+router.get('/perms', (req, res) => res.json(ADMIN_PERMS));
 
 // ── Suggestions management ──
 router.get('/suggestions', async (req, res) => {
@@ -245,7 +321,7 @@ router.get('/suggestions', async (req, res) => {
   }
 });
 
-router.patch('/suggestions/:id', async (req, res) => {
+router.patch('/suggestions/:id', requirePerm('manage_suggestions'), async (req, res) => {
   const { status } = req.body;
   if (!['open', 'planned', 'done', 'rejected'].includes(status)) {
     return res.status(400).json({ error: 'Invalid status' });
@@ -256,15 +332,17 @@ router.patch('/suggestions/:id', async (req, res) => {
       [status, req.params.id]
     );
     if (!rows[0]) return res.status(404).json({ error: 'Not found' });
+    logAction(req, 'suggestion_status', null, { suggestionId: parseInt(req.params.id), status });
     res.json(rows[0]);
   } catch {
     res.status(500).json({ error: 'Server error' });
   }
 });
 
-router.delete('/suggestions/:id', async (req, res) => {
+router.delete('/suggestions/:id', requirePerm('manage_suggestions'), async (req, res) => {
   try {
     await pool.query('DELETE FROM suggestions WHERE id = $1', [req.params.id]);
+    logAction(req, 'suggestion_delete', null, { suggestionId: parseInt(req.params.id) });
     res.json({ success: true });
   } catch {
     res.status(500).json({ error: 'Server error' });

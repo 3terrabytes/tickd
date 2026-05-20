@@ -92,7 +92,15 @@ function Protected({ children }) {
 }
 
 // Admins are users with the is_admin flag, plus the bootstrap "thedevs" account.
-const isAdminUser = (u) => !!u?.is_admin || (u?.username || '').toLowerCase() === 'thedevs';
+// Any tier of admin (full, master, or half with at least one perm) gets the
+// Admin tab. Per-action gating happens on the backend.
+const isAdminUser = (u) => {
+  if (!u) return false;
+  if (u.is_master_admin) return true;
+  if (u.is_admin) return true;
+  if (Array.isArray(u.admin_perms) && u.admin_perms.length > 0) return true;
+  return (u.username || '').toLowerCase() === 'thedevs';
+};
 
 function AdminGuard({ children }) {
   const { user } = useAuth();

@@ -29,6 +29,7 @@ export default function AdminPage() {
         {[
           { key: 'users',       label: 'ðŸ‘¥ Users' },
           { key: 'suggestions', label: 'ðŸ’¡ Suggestions' },
+          { key: 'logs',        label: 'ðŸ“œ Logs' },
         ].map(t => (
           <button key={t.key} onClick={() => setSection(t.key)} style={{
             flex: 1, padding: '9px 6px', border: 'none', borderRadius: 9, cursor: 'pointer',
@@ -41,6 +42,7 @@ export default function AdminPage() {
 
       {section === 'users' && <UsersSection />}
       {section === 'suggestions' && <SuggestionsSection />}
+      {section === 'logs' && <LogsSection />}
     </div>
   );
 }
@@ -276,7 +278,11 @@ function UsersSection() {
                 <div key={u.id} style={s.userRow(selected?.id === u.id, susp)} onClick={() => selectUser(u)}>
                   <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>
                     {u.username}
-                    {u.is_admin && <span style={{ marginLeft: 6, color: 'var(--gold)', fontSize: 10 }}>ADMIN</span>}
+                    {u.is_master_admin && <span style={{ marginLeft: 6, color: '#f0abfc', fontSize: 10 }}>MASTER</span>}
+                    {u.is_admin && !u.is_master_admin && <span style={{ marginLeft: 6, color: 'var(--gold)', fontSize: 10 }}>ADMIN</span>}
+                    {!u.is_admin && Array.isArray(u.admin_perms) && u.admin_perms.length > 0 && (
+                      <span style={{ marginLeft: 6, color: '#67e8f9', fontSize: 10 }}>HALFÂ·{u.admin_perms.length}</span>
+                    )}
                     {susp && <span style={{ marginLeft: 6, color: '#fca5a5', fontSize: 10 }}>{u.suspension_type === 'perm' ? 'BANNED' : 'SUSPENDED'}</span>}
                     {u.suspension_type === 'warn' && <span style={{ marginLeft: 6, color: '#fbbf24', fontSize: 10 }}>WARN</span>}
                   </div>
@@ -355,6 +361,18 @@ function UsersSection() {
                 {saving ? 'Saving...' : 'Save Stats'}
               </button>
             </div>
+
+            {/* Half-admin perms (master only) */}
+            {(me?.is_master_admin || (me?.username || '').toLowerCase() === 'thedevs') && (
+              <PermsCard
+                user={selected}
+                onSaved={(updated) => {
+                  setUsers(prev => prev.map(u => u.id === updated.id ? { ...u, ...updated } : u));
+                  setSelected(prev => ({ ...prev, ...updated }));
+                  showToast('Permissions saved');
+                }}
+              />
+            )}
 
             {/* Equipped */}
             <div style={s.card}>
@@ -733,3 +751,190 @@ const btnAccentTiny = { ...btnTiny, background: 'rgba(99,102,241,0.3)', color: '
 const btnDangerTiny = { ...btnTiny, background: '#7f1d1d', color: '#fca5a5' };
 const btnGhost    = { padding: '6px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text)', fontSize: 12, cursor: 'pointer' };
 const btnDanger   = { padding: '6px 12px', borderRadius: 8, border: '1px solid #ef444455', background: '#7f1d1d', color: '#fca5a5', fontSize: 12, fontWeight: 600, cursor: 'pointer' };
+
+
+// ----------------------------------------------------------------------
+// HALF-ADMIN PERMS CARD (master only)
+// ----------------------------------------------------------------------
+
+function PermsCard({ user, onSaved }) {
+  const [catalog, setCatalog] = useState({});      // { permKey: { label, desc } }
+  const [perms, setPerms]     = useState([]);
+  const [saving, setSaving]   = useState(false);
+  const [error, setError]     = useState(null);
+
+  useEffect(() => {
+    api.admin.permsCatalog().then(setCatalog).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    setPerms(Array.isArray(user.admin_perms) ? [...user.admin_perms] : []);
+  }, [user.id]);
+
+  const toggle = (key) => {
+    setPerms(p => p.includes(key) ? p.filter(x => x !== key) : [...p, key]);
+  };
+
+  const save = async () => {
+    setSaving(true); setError(null);
+    try {
+      const updated = await api.admin.setPerms(user.id, perms);
+      onSaved(updated);
+    } catch (e) { setError(e.message); }
+    setSaving(false);
+  };
+
+  return (
+    <div style={{
+      background: 'var(--bg2)', border: '1px solid #67e8f966', borderRadius: 12, padding: 14,
+      background: 'linear-gradient(180deg, rgba(103,232,249,0.05), transparent 40%), var(--bg2)',
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+        <h3 style={{ fontFamily: 'Cinzel,serif', fontSize: 14 }}>
+          ?? Half-Admin Permissions
+          {user.is_master_admin && <span style={{ marginLeft: 8, fontSize: 10, color: '#f0abfc' }}>MASTER (all perms implicit)</span>}
+          {user.is_admin && !user.is_master_admin && <span style={{ marginLeft: 8, fontSize: 10, color: 'var(--gold)' }}>FULL ADMIN</span>}
+        </h3>
+        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+          {perms.length}/{Object.keys(catalog).length}
+        </span>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginBottom: 10 }}>
+        {Object.entries(catalog).map(([key, info]) => {
+          const checked = perms.includes(key);
+          return (
+            <label key={key} style={{
+              display: 'flex', alignItems: 'flex-start', gap: 8, padding: 8,
+              background: checked ? 'rgba(103,232,249,0.10)' : 'var(--bg3)',
+              border: `1px solid ${checked ? '#67e8f966' : 'var(--border)'}`,
+              borderRadius: 8, cursor: 'pointer',
+            }}>
+              <input type="checkbox"
+                checked={checked}
+                onChange={() => toggle(key)}
+                style={{ marginTop: 2 }}
+              />
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)' }}>{info.label}</div>
+                <div style={{ fontSize: 10, color: 'var(--text-muted)', lineHeight: 1.3 }}>{info.desc}</div>
+              </div>
+            </label>
+          );
+        })}
+      </div>
+
+      {error && (
+        <div style={{ color: '#fca5a5', fontSize: 11, marginBottom: 8 }}>{error}</div>
+      )}
+
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 }}>
+        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+          {user.is_admin
+            ? "Full admin already — perms here only matter if you Remove admin first."
+            : (perms.length === 0
+              ? "No perms = regular user."
+              : `Half-admin with ${perms.length} perm${perms.length === 1 ? '' : 's'}.`)}
+        </span>
+        <button onClick={save} disabled={saving} className="btn btn-primary"
+          style={{ padding: '6px 14px', fontSize: 12 }}>
+          {saving ? 'Saving…' : 'Save Permissions'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ----------------------------------------------------------------------
+// LOGS SECTION
+// ----------------------------------------------------------------------
+
+function LogsSection() {
+  const [logs, setLogs]   = useState([]);
+  const [users, setUsers] = useState([]);
+  const [loading, setLoading]   = useState(true);
+  const [error, setError]       = useState(null);
+  const [adminFilter, setAdminFilter]   = useState('');
+  const [targetFilter, setTargetFilter] = useState('');
+  const [actionFilter, setActionFilter] = useState('');
+
+  const load = async () => {
+    setLoading(true); setError(null);
+    try {
+      const [logsRes, usersRes] = await Promise.all([
+        api.admin.logs({ admin: adminFilter, target: targetFilter, action: actionFilter, limit: 200 }),
+        users.length === 0 ? api.admin.listUsers() : Promise.resolve(users),
+      ]);
+      setLogs(logsRes);
+      if (users.length === 0) setUsers(usersRes);
+    } catch (e) {
+      setError(e.message);
+    }
+    setLoading(false);
+  };
+
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, []);
+
+  const allActions = Array.from(new Set(logs.map(l => l.action))).sort();
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div style={{ background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 12, padding: 12,
+        display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'flex-end' }}>
+        <div style={{ flex: '1 1 140px' }}>
+          <label style={{ fontSize: 10, color: 'var(--text-muted)' }}>ADMIN</label>
+          <select value={adminFilter} onChange={e => setAdminFilter(e.target.value)}
+            style={{ width: '100%', padding: '6px 10px', borderRadius: 8, background: 'var(--bg3)', border: '1px solid var(--border)', color: 'var(--text)', fontSize: 13 }}>
+            <option value="">Any admin</option>
+            {users.map(u => <option key={u.id} value={u.id}>{u.username}</option>)}
+          </select>
+        </div>
+        <div style={{ flex: '1 1 140px' }}>
+          <label style={{ fontSize: 10, color: 'var(--text-muted)' }}>TARGET</label>
+          <select value={targetFilter} onChange={e => setTargetFilter(e.target.value)}
+            style={{ width: '100%', padding: '6px 10px', borderRadius: 8, background: 'var(--bg3)', border: '1px solid var(--border)', color: 'var(--text)', fontSize: 13 }}>
+            <option value="">Any target</option>
+            {users.map(u => <option key={u.id} value={u.id}>{u.username}</option>)}
+          </select>
+        </div>
+        <div style={{ flex: '1 1 140px' }}>
+          <label style={{ fontSize: 10, color: 'var(--text-muted)' }}>ACTION</label>
+          <select value={actionFilter} onChange={e => setActionFilter(e.target.value)}
+            style={{ width: '100%', padding: '6px 10px', borderRadius: 8, background: 'var(--bg3)', border: '1px solid var(--border)', color: 'var(--text)', fontSize: 13 }}>
+            <option value="">Any action</option>
+            {allActions.map(a => <option key={a} value={a}>{a}</option>)}
+          </select>
+        </div>
+        <button onClick={load} className="btn btn-primary" style={{ padding: '7px 16px', fontSize: 13 }}>
+          {loading ? 'Loading…' : 'Apply'}
+        </button>
+      </div>
+
+      {error && <div style={{ color: '#fca5a5', fontSize: 12 }}>{error}</div>}
+
+      <div style={{ background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden' }}>
+        {logs.length === 0 ? (
+          <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>
+            No log entries.
+          </div>
+        ) : logs.map(l => (
+          <div key={l.id} style={{
+            padding: 10, borderBottom: '1px solid var(--border)',
+            display: 'grid', gridTemplateColumns: '110px 140px 140px 1fr', gap: 10, alignItems: 'center',
+            fontSize: 12,
+          }}>
+            <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>
+              {new Date(l.created_at).toLocaleString()}
+            </span>
+            <span style={{ fontWeight: 600 }}>{l.admin_username || `#${l.admin_id}`}</span>
+            <span style={{ color: '#67e8f9' }}>{l.action}</span>
+            <span style={{ color: 'var(--text-muted)' }}>
+              {l.target_username ? `? ${l.target_username}` : ''}
+              {l.details ? ' ' + JSON.stringify(l.details) : ''}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}

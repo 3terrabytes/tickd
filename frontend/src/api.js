@@ -40,6 +40,14 @@ export const api = {
     updateSuggestion: (id, status) => req('PATCH', `/admin/suggestions/${id}`, { status }),
     deleteSuggestion: (id) => req('DELETE', `/admin/suggestions/${id}`),
     items: () => req('GET', '/admin/items'),
+    setPerms: (id, perms) => req('POST', `/admin/users/${id}/perms`, { perms }),
+    permsCatalog: () => req('GET', '/admin/perms'),
+    logs: (filters = {}) => {
+      const qs = Object.entries(filters)
+        .filter(([, v]) => v !== undefined && v !== null && v !== '')
+        .map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join('&');
+      return req('GET', `/admin/logs${qs ? '?' + qs : ''}`);
+    },
   },
   habits: {
     list: () => req('GET', '/habits'),

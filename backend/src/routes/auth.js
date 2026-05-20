@@ -90,7 +90,7 @@ router.get('/me', require('../middleware/auth'), async (req, res) => {
     const { rows } = await pool.query(
       `SELECT id, username, email, xp, level, avatar_color, gold, avatar_skin, avatar_hair,
               avatar_eyes, avatar_hair_style, avatar_gender, avatar_beard, streak_shield,
-              debrief_seen, created_at, is_admin, dungeon_ascension,
+              debrief_seen, created_at, is_admin, is_master_admin, admin_perms, dungeon_ascension,
               suspension_type, suspension_reason, suspended_until, suspended_at, warning_seen
        FROM users WHERE id = $1`,
       [req.userId]

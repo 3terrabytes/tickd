@@ -162,6 +162,27 @@ const initDB = async () => {
     -- Surfaced on /auth/me and used to gate harder difficulties.
     ALTER TABLE users ADD COLUMN IF NOT EXISTS dungeon_ascension INTEGER DEFAULT 0;
 
+    -- Half-admin permission system. `is_admin` stays as the "full admin"
+    -- flag (all perms implicit). `admin_perms` is a granular list for
+    -- half-admins. `is_master_admin` is the highest tier — only they can
+    -- grant/revoke admin powers and view the audit log.
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS admin_perms     TEXT[];
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS is_master_admin BOOLEAN DEFAULT false;
+
+    CREATE TABLE IF NOT EXISTS admin_logs (
+      id              SERIAL PRIMARY KEY,
+      admin_id        INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      admin_username  VARCHAR(50),
+      action          VARCHAR(60) NOT NULL,
+      target_id       INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      target_username VARCHAR(50),
+      details         JSONB,
+      created_at      TIMESTAMP DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_admin_logs_created ON admin_logs(created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_admin_logs_admin   ON admin_logs(admin_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_admin_logs_target  ON admin_logs(target_id, created_at DESC);
+
     -- PvP Battles — async turn-based. One active battle per user; alternating
     -- turns; unlimited rounds until someone hits 0 HP or forfeits.
     CREATE TABLE IF NOT EXISTS battles (
@@ -183,9 +204,11 @@ const initDB = async () => {
     CREATE INDEX IF NOT EXISTS idx_battles_challenger ON battles(challenger_id, status);
     CREATE INDEX IF NOT EXISTS idx_battles_opponent   ON battles(opponent_id, status);
   `);
-  // Grant infinite gold + admin flag to theDevs account (if it exists)
+  // Grant infinite gold + master admin to theDevs account (if it exists).
+  // Master admin is the highest tier — only they can grant admin perms.
   await pool.query(`
-    UPDATE users SET gold = 2147483647, is_admin = true WHERE LOWER(username) = 'thedevs'
+    UPDATE users SET gold = 2147483647, is_admin = true, is_master_admin = true
+    WHERE LOWER(username) = 'thedevs'
   `);
 
   // Backfill milestone-reward banners for any user already past the threshold.
