@@ -192,20 +192,33 @@ export default function DungeonPage() {
     if (busy) return;
     setBusy(true);
     try {
-      const mx = playerMaxHp(user.level);
+      // Reset every combat-relevant state so leftovers from a previous run
+      // (HP, monster HP, intent, statuses, turn count, log, potions) don't
+      // bleed into wave 1. This was the source of the "clicking is buggy"
+      // bug — the battle screen would render with stale monsterHp etc.
+      const mx = playerMaxHp(user?.level);
+      const { monster } = await api.dungeon.survivalWave(1);
+      if (!monster) { addLog('⚠ No monster returned for wave 1.'); setBusy(false); return; }
+
       setHp(mx);
       setMaxHp(mx);
+      setMonsterHp(monster.hp);
+      setStatuses({});
+      setTurnCount(0);
+      setIntent(computeIntent(monster, 0));
+      setStrengthBuff(null);
+      setDefenseBuff(null);
+      setGuarding(false);
       setLog([]);
+      setPotions([]);
       setSurvivalActive(true);
       setSurvivalWave(1);
-      setPotions([]);
-      addLog('♾️ Survival mode begins. Wave 1.');
-      const { monster } = await api.dungeon.survivalWave(1);
       setActiveNode({ id: 'survival-1', type: 'battle', monster, floor: 1, wave: 1 });
       setPhase('battle');
+      addLog('♾️ Survival mode begins. Wave 1.');
       await showEncounter(monster);
       addLog(`${monster.sprite} ${monster.name}. ${monster.taunt}`);
-    } catch (err) { addLog('⚠ ' + err.message); }
+    } catch (err) { addLog('⚠ ' + err.message); setBusy(false); return; }
     setBusy(false);
   };
 
