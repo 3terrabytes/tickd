@@ -78,6 +78,10 @@ export default function DungeonPage() {
   const [position, setPosition] = useState(null);// last cleared node id
   const [cleared, setCleared] = useState(new Set());
   const [activeNode, setActiveNode] = useState(null);
+  // Survival mode: when active, we ignore the map and just keep spawning
+  // single-monster waves until the player dies.
+  const [survivalWave, setSurvivalWave] = useState(0);
+  const [survivalActive, setSurvivalActive] = useState(false);
   const [hp, setHp] = useState(0);
   const [maxHp, setMaxHp] = useState(0);
 
@@ -182,10 +186,55 @@ export default function DungeonPage() {
     setBusy(false);
   };
 
+  // Survival run — kicks off an endless gauntlet. Each victory advances
+  // the wave counter; defeat is permanent for that run.
+  const startSurvival = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const mx = playerMaxHp(user.level);
+      setHp(mx);
+      setMaxHp(mx);
+      setLog([]);
+      setSurvivalActive(true);
+      setSurvivalWave(1);
+      setPotions([]);
+      addLog('♾️ Survival mode begins. Wave 1.');
+      const { monster } = await api.dungeon.survivalWave(1);
+      setActiveNode({ id: 'survival-1', type: 'battle', monster, floor: 1, wave: 1 });
+      setPhase('battle');
+      await showEncounter(monster);
+      addLog(`${monster.sprite} ${monster.name}. ${monster.taunt}`);
+    } catch (err) { addLog('⚠ ' + err.message); }
+    setBusy(false);
+  };
+
+  const advanceSurvivalWave = async () => {
+    if (busy) return;
+    setBusy(true);
+    const nextWave = survivalWave + 1;
+    try {
+      const { monster } = await api.dungeon.survivalWave(nextWave);
+      setSurvivalWave(nextWave);
+      setMonsterHp(monster.hp);
+      setActiveNode({ id: `survival-${nextWave}`, type: 'battle', monster, floor: Math.min(5, Math.floor(nextWave / 4) + 1), wave: nextWave });
+      setStatuses({});
+      setTurnCount(0);
+      setIntent(computeIntent(monster, 0));
+      setPhase('battle');
+      addLog(`🌊 Wave ${nextWave} approaches.`);
+      await showEncounter(monster);
+      addLog(`${monster.sprite} ${monster.name}.`);
+    } catch (err) { addLog('⚠ ' + err.message); }
+    setBusy(false);
+  };
+
   const exitRun = () => {
     setMap(null);
     setPhase('idle');
     setActiveNode(null);
+    setSurvivalActive(false);
+    setSurvivalWave(0);
     setPosition(null);
     setCleared(new Set());
     setPotions([]);
@@ -213,7 +262,9 @@ export default function DungeonPage() {
   // Pet damage scaling — equipped companion adds free damage every turn.
   // Tuned so a Mini Dragon hits harder than a Habit Cat without trivialising
   // boss fights.
-  const PET_DMG = { common: 4, rare: 8, epic: 14, legendary: 22 };
+  // Pets hit hard now. Was 4/8/14/22 — roughly doubled, and mythic is its
+  // own tier above legendary. A Mini Dragon now hits like an Aimed Shot.
+  const PET_DMG = { common: 9, rare: 18, epic: 30, legendary: 48, mythic: 75 };
   const petBaseDamage = () => {
     const pet = inventory && inventory.equipped && inventory.equipped.companion;
     if (!pet) return 0;
@@ -405,7 +456,9 @@ export default function DungeonPage() {
       flashBanner('VICTORY!', '#fde047', 1100);
       await sleep(600);
       try {
-        const res = await api.dungeon.reward(monster.id);
+        const res = survivalActive
+          ? await api.dungeon.survivalReward(monster.id, survivalWave)
+          : await api.dungeon.reward(monster.id);
         countUpReward(res.xp, res.gold);
         await refreshUser();
       } catch (err) { addLog('⚠ ' + err.message); }
@@ -443,7 +496,9 @@ export default function DungeonPage() {
         flashBanner('VICTORY!', '#fde047', 1100);
         await sleep(600);
         try {
-          const res = await api.dungeon.reward(monster.id);
+          const res = survivalActive
+            ? await api.dungeon.survivalReward(monster.id, survivalWave)
+            : await api.dungeon.reward(monster.id);
           countUpReward(res.xp, res.gold);
           await refreshUser();
         } catch (err) { addLog('⚠ ' + err.message); }
@@ -630,15 +685,24 @@ export default function DungeonPage() {
             </div>
           </div>
 
-          <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
             <button className="btn btn-ghost" onClick={() => setEditingLoadout(true)} style={{ padding: '10px 18px', fontSize: 13 }}>
               ⚙️ Edit Loadout
             </button>
             <button className="btn btn-primary" onClick={startRun} disabled={busy}
               style={{ padding: '10px 24px', fontSize: 14, background: '#7f1d1d', borderColor: '#ef4444' }}>
-              {busy ? '...' : '⚔️ Enter the Dungeon'}
+              {busy ? '...' : '⚔️ Standard Run'}
+            </button>
+            <button className="btn btn-primary" onClick={startSurvival} disabled={busy}
+              style={{ padding: '10px 24px', fontSize: 14, background: '#7c3aed', borderColor: '#a78bfa' }}>
+              ♾️ Survival Mode
             </button>
           </div>
+          {user?.best_survival_wave > 0 && (
+            <div style={{ marginTop: 10, fontSize: 12, color: 'var(--text-muted)' }}>
+              Best Survival Wave: <strong style={{ color: '#a78bfa' }}>#{user.best_survival_wave}</strong>
+            </div>
+          )}
         </div>
 
         {log.length > 0 && <LogPanel log={log} />}
@@ -654,6 +718,17 @@ export default function DungeonPage() {
         <HpBar value={hp} max={maxHp} color="#10b981" />
       </div>
       <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+        {survivalActive && (
+          <div title="Survival Wave" style={{
+            fontSize: 12, color: '#fff', fontWeight: 700, padding: '4px 10px',
+            background: 'linear-gradient(90deg, #7c3aed, #ec4899)', borderRadius: 99,
+          }}>
+            ♾️ Wave {survivalWave}
+            {user?.best_survival_wave > 0 && (
+              <span style={{ opacity: 0.7, marginLeft: 4 }}>· best {user.best_survival_wave}</span>
+            )}
+          </div>
+        )}
         <div title="Your gold" style={{ fontSize: 13, color: '#fbbf24', fontWeight: 700 }}>
           💰 {user?.gold || 0}
         </div>
@@ -909,9 +984,15 @@ export default function DungeonPage() {
                 <div style={{ fontFamily: 'Cinzel,serif', fontSize: 28, fontWeight: 700, color: '#fbbf24' }}>+{rewardCount.gold} 💰</div>
               </div>
             </div>
-            <button className="btn btn-gold" onClick={completeRoom} style={{ padding: '10px 28px', fontSize: 14 }}>
-              🗺️ Back to map
-            </button>
+            {survivalActive ? (
+              <button className="btn btn-gold" onClick={advanceSurvivalWave} style={{ padding: '10px 28px', fontSize: 14 }} disabled={busy}>
+                ♾️ Next Wave (#{survivalWave + 1}) →
+              </button>
+            ) : (
+              <button className="btn btn-gold" onClick={completeRoom} style={{ padding: '10px 28px', fontSize: 14 }}>
+                🗺️ Back to map
+              </button>
+            )}
           </div>
         )}
 
@@ -1023,9 +1104,13 @@ export default function DungeonPage() {
           borderColor: '#ef444466', background: 'rgba(239,68,68,0.08)',
         }}>
           <div style={{ fontSize: 48, marginBottom: 6 }}>💀</div>
-          <div style={{ fontFamily: 'Cinzel,serif', fontSize: 22, color: '#fca5a5', marginBottom: 6 }}>You fell in the dark.</div>
+          <div style={{ fontFamily: 'Cinzel,serif', fontSize: 22, color: '#fca5a5', marginBottom: 6 }}>
+            {survivalActive ? `You fell on Wave ${survivalWave}.` : 'You fell in the dark.'}
+          </div>
           <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 16 }}>
-            The catacombs claim another soul. You keep the gold and XP you earned, but the run is over.
+            {survivalActive
+              ? `Best wave: #${Math.max(user?.best_survival_wave || 0, survivalWave - 1)}. You keep the XP + gold earned this run.`
+              : 'The catacombs claim another soul. You keep the gold and XP you earned, but the run is over.'}
           </div>
           <button className="btn btn-ghost" onClick={exitRun} style={{ padding: '10px 28px' }}>
             Leave the dungeon

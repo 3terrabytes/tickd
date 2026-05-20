@@ -233,16 +233,16 @@ const ITEMS = [
 
   // ── MYTHIC TIER (Legends shop, unlocked at Lv 10) ────────────────────
   // Costs 2000-4000g. Magic Power 51-80. Visible only when level ≥ 10.
-  { id: 'sword_starfall',    type: 'weapon',    name: 'Starfall Blade',    rarity: 'mythic', cost: 3800, magic: 70, emoji: '☄️', desc: 'Forged from the bones of a dying sun. Hums with starlight.', legendsOnly: true },
-  { id: 'staff_eternity',    type: 'weapon',    name: 'Staff of Eternity', rarity: 'mythic', cost: 3500, magic: 68, emoji: '🪄', desc: 'Channels magic from outside time itself.', legendsOnly: true },
-  { id: 'armor_chronos',     type: 'armor',     name: 'Chronos Plate',     rarity: 'mythic', cost: 3500, magic: 65, emoji: '⏳', desc: 'Stops time briefly when struck. The instant repeats.', legendsOnly: true },
-  { id: 'armor_singular',    type: 'armor',     name: 'Singularity Cloak', rarity: 'mythic', cost: 3200, magic: 62, emoji: '🕳️', desc: 'A garment hemmed with collapsed stars.', legendsOnly: true },
-  { id: 'pet_celestial',     type: 'companion', name: 'Celestial Phoenix', rarity: 'mythic', cost: 4000, magic: 75, emoji: '✨', desc: 'A creature from before the first stars. Loyalty unmeasurable.', legendsOnly: true },
-  { id: 'pet_void',          type: 'companion', name: 'Void Drake',        rarity: 'mythic', cost: 3700, magic: 72, emoji: '🐉', desc: 'It speaks no language but its silence is louder than war.', legendsOnly: true },
-  { id: 'banner_singularity',type: 'banner',    name: 'Singularity Banner',rarity: 'mythic', cost: 2500, magic: 0,  color: 'linear-gradient(90deg,#000000,#7c3aed,#f0abfc,#22d3ee,#fbbf24,#000000)', desc: 'Every colour at once. The horizon of the impossible.', legendsOnly: true },
-  { id: 'badge_omega',       type: 'badge',     name: 'Omega Badge',       rarity: 'mythic', cost: 2200, magic: 0,  emoji: 'Ω',  desc: 'The end. The beginning. The mark of a true legend.', legendsOnly: true },
-  { id: 'title_ascendant',   type: 'title',     name: '"The Ascendant"',   rarity: 'mythic', cost: 2200, magic: 0,  emoji: '🌌', desc: 'Beyond mortal reach.', legendsOnly: true },
-  { id: 'title_godslayer',   type: 'title',     name: '"Godslayer"',       rarity: 'mythic', cost: 3000, magic: 0,  emoji: '⚔️', desc: 'You have ended gods.', legendsOnly: true },
+  { id: 'sword_starfall',    type: 'weapon',    name: 'Starfall Blade',    rarity: 'mythic', cost: 3800, magic: 70, emoji: '☄️', desc: 'Forged from the bones of a dying sun. Hums with starlight.', legendsOnly: true, bonus: { type: 'dmg_pct',    value: 25, label: '+25% damage dealt' } },
+  { id: 'staff_eternity',    type: 'weapon',    name: 'Staff of Eternity', rarity: 'mythic', cost: 3500, magic: 68, emoji: '🪄', desc: 'Channels magic from outside time itself.', legendsOnly: true, bonus: { type: 'crit_pct',   value: 25, label: '+25% crit chance' } },
+  { id: 'armor_chronos',     type: 'armor',     name: 'Chronos Plate',     rarity: 'mythic', cost: 3500, magic: 65, emoji: '⏳', desc: 'Stops time briefly when struck. The instant repeats.', legendsOnly: true, bonus: { type: 'dmg_taken_pct', value: -30, label: '-30% damage taken' } },
+  { id: 'armor_singular',    type: 'armor',     name: 'Singularity Cloak', rarity: 'mythic', cost: 3200, magic: 62, emoji: '🕳️', desc: 'A garment hemmed with collapsed stars.', legendsOnly: true, bonus: { type: 'max_hp_pct', value: 25, label: '+25% max HP' } },
+  { id: 'pet_celestial',     type: 'companion', name: 'Celestial Phoenix', rarity: 'mythic', cost: 4000, magic: 75, emoji: '✨', desc: 'A creature from before the first stars. Loyalty unmeasurable.', legendsOnly: true, bonus: { type: 'pet_dmg_pct',  value: 50, label: '+50% pet damage' } },
+  { id: 'pet_void',          type: 'companion', name: 'Void Drake',        rarity: 'mythic', cost: 3700, magic: 72, emoji: '🐉', desc: 'It speaks no language but its silence is louder than war.', legendsOnly: true, bonus: { type: 'pet_dmg_pct',  value: 40, label: '+40% pet damage' } },
+  { id: 'banner_singularity',type: 'banner',    name: 'Singularity Banner',rarity: 'mythic', cost: 2500, magic: 0,  color: 'linear-gradient(90deg,#000000,#7c3aed,#f0abfc,#22d3ee,#fbbf24,#000000)', desc: 'Every colour at once. The horizon of the impossible.', legendsOnly: true, bonus: { type: 'gold_pct',   value: 30, label: '+30% gold from dungeon' } },
+  { id: 'badge_omega',       type: 'badge',     name: 'Omega Badge',       rarity: 'mythic', cost: 2200, magic: 0,  emoji: 'Ω',  desc: 'The end. The beginning. The mark of a true legend.', legendsOnly: true, bonus: { type: 'xp_pct',     value: 25, label: '+25% XP from all sources' } },
+  { id: 'title_ascendant',   type: 'title',     name: '"The Ascendant"',   rarity: 'mythic', cost: 2200, magic: 0,  emoji: '🌌', desc: 'Beyond mortal reach.', legendsOnly: true, bonus: { type: 'block_start', value: 12, label: 'Start every fight with 12 block' } },
+  { id: 'title_godslayer',   type: 'title',     name: '"Godslayer"',       rarity: 'mythic', cost: 3000, magic: 0,  emoji: '⚔️', desc: 'You have ended gods.', legendsOnly: true, bonus: { type: 'first_hit_pct', value: 100, label: 'First hit each fight: 2x damage' } },
 ];
 
 // ── PACKS ────────────────────────────────────────────────────────────────
@@ -412,4 +412,21 @@ const packDiscount = (pack) => {
   return Math.max(0, Math.round((1 - pack.cost / full) * 100));
 };
 
-module.exports = { ITEMS, RARITIES, PACKS, itemById, packById, packFullCost, packDiscount, weaponClassOf };
+// Sum the active mythic bonuses from a map of equipped items. Returns an
+// object keyed by bonus.type, with values summed. Used by combat + reward
+// hooks to apply effects without re-walking equipment everywhere.
+//
+// equipped: { weapon, armor, banner, badge, companion, title } — item objects.
+function bonusesFrom(equipped) {
+  const out = {};
+  if (!equipped) return out;
+  for (const slot of Object.values(equipped)) {
+    if (!slot || !slot.bonus) continue;
+    const { type, value } = slot.bonus;
+    if (!type) continue;
+    out[type] = (out[type] || 0) + (Number(value) || 0);
+  }
+  return out;
+}
+
+module.exports = { ITEMS, RARITIES, PACKS, itemById, packById, packFullCost, packDiscount, weaponClassOf, bonusesFrom };

@@ -5,7 +5,21 @@ const { addXP } = require('../utils/xp');
 const { ATTACKS, attackById, attacksForClass, DEFAULT_LOADOUT, defaultLoadoutFor } = require('../data/attacks');
 const { MONSTERS, monsterById, scaledMonster } = require('../data/monsters');
 const { generateMap, POTIONS, potionById } = require('../data/dungeon');
-const { itemById, weaponClassOf } = require('../data/items');
+const { itemById, weaponClassOf, bonusesFrom } = require('../data/items');
+
+// Load a user's full equipped set (items resolved) — used for mythic bonuses.
+async function userEquipped(userId) {
+  const { rows } = await pool.query('SELECT * FROM user_equipped WHERE user_id = $1', [userId]);
+  const r = rows[0] || {};
+  return {
+    weapon:    r.weapon    ? itemById(r.weapon)    : null,
+    armor:     r.armor     ? itemById(r.armor)     : null,
+    banner:    r.banner    ? itemById(r.banner)    : null,
+    badge:     r.badge     ? itemById(r.badge)     : null,
+    companion: r.companion ? itemById(r.companion) : null,
+    title:     r.title     ? itemById(r.title)     : null,
+  };
+}
 
 const router = express.Router();
 router.use(auth);
@@ -72,6 +86,9 @@ router.get('/loadout', async (req, res) => {
       slots.push(candidate);
     }
 
+    const equipped = await userEquipped(req.userId);
+    const bonuses  = bonusesFrom(equipped);
+
     res.json({
       slots,
       slotDetails: slots.map(id => attackById(id)).filter(Boolean),
@@ -79,6 +96,7 @@ router.get('/loadout', async (req, res) => {
       weaponClass,
       magic,
       armor,
+      bonuses, // { dmg_pct, crit_pct, pet_dmg_pct, max_hp_pct, block_start, first_hit_pct, dmg_taken_pct, gold_pct, xp_pct }
     });
   } catch (err) {
     console.error('dungeon/loadout error', err);
@@ -152,10 +170,19 @@ router.post('/reward', async (req, res) => {
     const level = userRows[0]?.level || 1;
     const monster = scaledMonster(baseMonster, level);
 
-    await addXP(req.userId, monster.xp);
+    // Apply mythic-bonus multipliers to gold + XP (Omega Badge +25% XP,
+    // Singularity Banner +30% gold, etc.).
+    const equipped = await userEquipped(req.userId);
+    const bonuses = bonusesFrom(equipped);
+    const xpMult   = 1 + ((bonuses.xp_pct   || 0) / 100);
+    const goldMult = 1 + ((bonuses.gold_pct || 0) / 100);
+    const finalXp   = Math.round(monster.xp   * xpMult);
+    const finalGold = Math.round(monster.gold * goldMult);
+
+    await addXP(req.userId, finalXp);
     await pool.query(
       'UPDATE users SET gold = gold + $1, lifetime_gold = COALESCE(lifetime_gold, 0) + $1 WHERE id = $2',
-      [monster.gold, req.userId]
+      [finalGold, req.userId]
     );
     // Bumping ascension on every boss kill — surfaces on /auth/me for the
     // entrance-screen ascension chip and future difficulty modifiers.
@@ -166,9 +193,91 @@ router.post('/reward', async (req, res) => {
       );
     }
     const { rows } = await pool.query('SELECT xp, level, gold, dungeon_ascension FROM users WHERE id = $1', [req.userId]);
-    res.json({ xp: monster.xp, gold: monster.gold, user: rows[0] });
+    res.json({ xp: finalXp, gold: finalGold, user: rows[0] });
   } catch (err) {
     console.error('dungeon/reward error', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────
+// SURVIVAL MODE — endless waves until you die.
+// ─────────────────────────────────────────────────────────────────────
+// Each wave: pick a monster whose tier scales with the wave number, then
+// stack the player's level scaling on top. Tier ramps to 5 by wave ~16
+// and stays there with multiplied stats.
+function survivalMonster(wave, playerLevel) {
+  const tier = Math.min(5, 1 + Math.floor(wave / 4)); // 1..5
+  const pool = MONSTERS.filter(m => m.tier === tier);
+  const base = pool[Math.floor(Math.random() * pool.length)];
+  if (!base) return null;
+  // Past tier 5, the wave keeps ramping HP/power so survival never plateaus.
+  const overflow = Math.max(0, wave - 16);
+  const scaled = scaledMonster(base, playerLevel);
+  return {
+    ...scaled,
+    hp:     Math.round(scaled.hp    * (1 + overflow * 0.15)),
+    power:  Math.round(scaled.power * (1 + overflow * 0.08)),
+    xp:     Math.round(scaled.xp    * (1 + wave * 0.05)),
+    gold:   Math.round(scaled.gold  * (1 + wave * 0.06)),
+  };
+}
+
+// GET /survival/wave/:wave — returns the monster for that wave.
+router.get('/survival/wave/:wave', async (req, res) => {
+  try {
+    const wave = Math.max(1, parseInt(req.params.wave) || 1);
+    const { rows } = await pool.query('SELECT level FROM users WHERE id = $1', [req.userId]);
+    const level = rows[0]?.level || 1;
+    const monster = survivalMonster(wave, level);
+    if (!monster) return res.status(500).json({ error: 'No monster pool' });
+    res.json({ wave, monster });
+  } catch (err) {
+    console.error('dungeon/survival/wave error', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// POST /survival/reward { monsterId, wave } — claim XP/gold, update best wave.
+// Mirrors /reward but with the wave multiplier baked in and the monster id
+// allowed to be ANY tier (since survival picks freely).
+router.post('/survival/reward', async (req, res) => {
+  try {
+    const { monsterId, wave } = req.body;
+    const base = monsterById(monsterId);
+    if (!base) return res.status(400).json({ error: 'Unknown monster' });
+
+    const { rows: u } = await pool.query('SELECT level FROM users WHERE id = $1', [req.userId]);
+    const level = u[0]?.level || 1;
+    const w = Math.max(1, parseInt(wave) || 1);
+    const monster = survivalMonster(w, level); // recompute so client can't lie about the wave reward
+
+    const equipped = await userEquipped(req.userId);
+    const bonuses  = bonusesFrom(equipped);
+    const xpMult   = 1 + ((bonuses.xp_pct   || 0) / 100);
+    const goldMult = 1 + ((bonuses.gold_pct || 0) / 100);
+    const finalXp   = Math.round((monster.xp   || base.xp)   * xpMult);
+    const finalGold = Math.round((monster.gold || base.gold) * goldMult);
+
+    await addXP(req.userId, finalXp);
+    await pool.query(
+      'UPDATE users SET gold = gold + $1, lifetime_gold = COALESCE(lifetime_gold, 0) + $1 WHERE id = $2',
+      [finalGold, req.userId]
+    );
+    // Update best wave if we just beat it.
+    await pool.query(
+      `UPDATE users SET best_survival_wave = GREATEST(COALESCE(best_survival_wave, 0), $1)
+       WHERE id = $2`,
+      [w, req.userId]
+    );
+
+    const { rows } = await pool.query(
+      'SELECT xp, level, gold, best_survival_wave FROM users WHERE id = $1',
+      [req.userId]
+    );
+    res.json({ xp: finalXp, gold: finalGold, user: rows[0], wave: w });
+  } catch (err) {
+    console.error('dungeon/survival/reward error', err);
     res.status(500).json({ error: 'Server error' });
   }
 });

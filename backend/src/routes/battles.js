@@ -32,7 +32,9 @@ async function assertFriends(a, b) {
 // Resolve a user's combat-relevant gear/state from the DB.
 async function loadCombatant(userId) {
   const { rows } = await pool.query(
-    'SELECT id, username, level FROM users WHERE id = $1',
+    `SELECT id, username, level,
+            avatar_skin, avatar_hair, avatar_eyes, avatar_hair_style, avatar_gender, avatar_beard
+     FROM users WHERE id = $1`,
     [userId]
   );
   const u = rows[0];
@@ -42,6 +44,7 @@ async function loadCombatant(userId) {
   const equipped = {
     weapon:    r.weapon    ? itemById(r.weapon)    : null,
     armor:     r.armor     ? itemById(r.armor)     : null,
+    banner:    r.banner    ? itemById(r.banner)    : null,
     badge:     r.badge     ? itemById(r.badge)     : null,
     companion: r.companion ? itemById(r.companion) : null,
   };
@@ -50,7 +53,15 @@ async function loadCombatant(userId) {
     .reduce((a, b) => a + b, 0);
   const armor = equipped.armor?.magic || 0;
   const weaponClass = weaponClassOf(equipped.weapon);
-  return { id: u.id, username: u.username, level: u.level, magic, armor, weaponClass };
+  return {
+    id: u.id, username: u.username, level: u.level,
+    magic, armor, weaponClass, equipped,
+    // Appearance keys mirror what PixelCharacter expects.
+    appearance: {
+      avatar_skin: u.avatar_skin, avatar_hair: u.avatar_hair, avatar_eyes: u.avatar_eyes,
+      avatar_hair_style: u.avatar_hair_style, avatar_gender: u.avatar_gender, avatar_beard: u.avatar_beard,
+    },
+  };
 }
 
 // Return the *active* battle the user is in, or null. There's at most one

@@ -907,6 +907,41 @@ function BattleModal({ battle, busy, error, onTurn, onForfeit, onRefresh, onClos
   const theirMax  = battle.youAreChallenger ? battle.opponent_max_hp : battle.challenger_max_hp;
 
   const lastFive = (battle.log || []).slice(-6);
+  const lastLog  = (battle.log || []).slice(-1)[0];
+
+  // Replay the most recent log entry as an animation each time the battle
+  // updates. We diff on turn count so the same turn isn't re-played mid-render.
+  const [lastShownTurn, setLastShownTurn] = useState(0);
+  const [playerAnim, setPlayerAnim]       = useState('');
+  const [opponentAnim, setOpponentAnim]   = useState('');
+  const [popDmg, setPopDmg]               = useState(null); // { side, value, kind }
+  const [showFight, setShowFight]         = useState(false);
+
+  useEffect(() => {
+    // Fire FIGHT! banner the first time the modal opens for this battle.
+    if (battle.turn_count === 0 && !finished) {
+      setShowFight(true);
+      const t = setTimeout(() => setShowFight(false), 700);
+      return () => clearTimeout(t);
+    }
+  }, [battle.id, finished, battle.turn_count]);
+
+  useEffect(() => {
+    if (!lastLog || lastLog.turn === lastShownTurn) return;
+    setLastShownTurn(lastLog.turn || 0);
+    // Determine which side attacked. by-name matches the actor.
+    const attackerWasYou = lastLog.by === you?.username;
+    if (lastLog.heal) {
+      setPopDmg({ side: attackerWasYou ? 'you' : 'them', value: lastLog.heal, kind: 'heal' });
+      if (attackerWasYou) setPlayerAnim('battle-player-heal'); else setOpponentAnim('battle-player-heal');
+    } else if (lastLog.dmg) {
+      setPopDmg({ side: attackerWasYou ? 'them' : 'you', value: lastLog.dmg, kind: lastLog.crit ? 'crit' : 'hit' });
+      if (attackerWasYou) setPlayerAnim('battle-player-dash'); else setOpponentAnim('battle-player-dash');
+    }
+    const t1 = setTimeout(() => { setPlayerAnim(''); setOpponentAnim(''); }, 600);
+    const t2 = setTimeout(() => setPopDmg(null), 1100);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
+  }, [lastLog, lastShownTurn, you?.username]);
 
   return (
     <div style={{
@@ -919,9 +954,9 @@ function BattleModal({ battle, busy, error, onTurn, onForfeit, onRefresh, onClos
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
           <div style={{ fontFamily: 'Cinzel,serif', fontSize: 18 }}>
-            ??? vs {them?.username} <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>· Lv {them?.level}</span>
+            ??? vs {them?.username} <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>ï¿½ Lv {them?.level}</span>
           </div>
-          <button className="btn btn-ghost" onClick={onClose} style={{ padding: '4px 10px', fontSize: 13 }}>×</button>
+          <button className="btn btn-ghost" onClick={onClose} style={{ padding: '4px 10px', fontSize: 13 }}>ï¿½</button>
         </div>
 
         {/* HP bars */}
@@ -929,6 +964,44 @@ function BattleModal({ battle, busy, error, onTurn, onForfeit, onRefresh, onClos
           <BattleHp label={`${you?.username} (you)`} value={yourHp} max={yourMax} color="#10b981" />
           <div style={{ height: 8 }} />
           <BattleHp label={`${them?.username}`}   value={theirHp} max={theirMax} color="#ef4444" />
+        </div>
+
+        {/* Combatants stage â€” avatars side-by-side with attack animations
+            and floating damage numbers. Lets duels feel like dungeon fights. */}
+        <div style={{
+          position: 'relative', height: 140, display: 'flex',
+          alignItems: 'flex-end', justifyContent: 'space-between',
+          padding: '0 20px', marginBottom: 12,
+          borderRadius: 10,
+          background: 'radial-gradient(ellipse at 50% 30%, rgba(99,102,241,0.18) 0%, rgba(0,0,0,0.4) 70%)',
+          border: '1px solid var(--border)',
+          overflow: 'hidden',
+        }}>
+          <span className="dungeon-torch" style={{ position: 'absolute', top: 6, left: 6, fontSize: 16 }}>ðŸ”¥</span>
+          <span className="dungeon-torch right" style={{ position: 'absolute', top: 6, right: 6, fontSize: 16 }}>ðŸ”¥</span>
+
+          <div className={`${playerAnim || 'battle-idle'}`} style={{ position: 'relative' }}>
+            <PixelCharacter appearance={you?.appearance || you || {}} equipped={you?.equipped || {}} size={84} />
+            {popDmg?.side === 'you' && (
+              <div className={`battle-damage ${popDmg.kind === 'heal' ? 'heal' : ''} ${popDmg.kind === 'crit' ? 'crit' : ''}`}>
+                {popDmg.kind === 'heal' ? `+${popDmg.value}` : popDmg.value}
+              </div>
+            )}
+          </div>
+          <div className={`${opponentAnim || 'battle-idle'}`} style={{
+            position: 'relative', transform: 'scaleX(-1)',
+          }}>
+            <PixelCharacter appearance={them?.appearance || them || {}} equipped={them?.equipped || {}} size={84} />
+            {popDmg?.side === 'them' && (
+              <div className={`battle-damage ${popDmg.kind === 'heal' ? 'heal' : ''} ${popDmg.kind === 'crit' ? 'crit' : ''}`}
+                style={{ transform: 'scaleX(-1)' }}>
+                {popDmg.kind === 'heal' ? `+${popDmg.value}` : popDmg.value}
+              </div>
+            )}
+          </div>
+          {showFight && (
+            <div className="battle-banner" style={{ color: '#fca5a5', fontSize: 36 }}>FIGHT!</div>
+          )}
         </div>
 
         {/* Log */}
@@ -969,7 +1042,7 @@ function BattleModal({ battle, busy, error, onTurn, onForfeit, onRefresh, onClos
         ) : battle.yourTurn ? (
           <>
             <div style={{ fontSize: 11, color: 'var(--text-muted)', letterSpacing: '0.08em', fontWeight: 600, marginBottom: 6 }}>
-              YOUR TURN — PICK AN ATTACK
+              YOUR TURN ï¿½ PICK AN ATTACK
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 8, marginBottom: 10 }}>
               {(battle.availableAttacks || []).map(a => (
@@ -985,9 +1058,9 @@ function BattleModal({ battle, busy, error, onTurn, onForfeit, onRefresh, onClos
                   <div style={{ fontSize: 16, marginBottom: 2 }}>{a.emoji} <span style={{ fontSize: 12, fontWeight: 700 }}>{a.name}</span></div>
                   <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>
                     {a.tag === 'heal' ? `+${a.heal} HP` : `${a.power} dmg`}
-                    {a.tag === 'burn' ? ' · BURN' : ''}
-                    {a.tag === 'poison' ? ' · POISON' : ''}
-                    {a.tag === 'stun' ? ' · STUN' : ''}
+                    {a.tag === 'burn' ? ' ï¿½ BURN' : ''}
+                    {a.tag === 'poison' ? ' ï¿½ POISON' : ''}
+                    {a.tag === 'stun' ? ' ï¿½ STUN' : ''}
                   </div>
                 </button>
               ))}
@@ -1001,7 +1074,7 @@ function BattleModal({ battle, busy, error, onTurn, onForfeit, onRefresh, onClos
           }}>
             <div style={{ fontSize: 24, marginBottom: 4 }}>?</div>
             <div style={{ fontSize: 13, color: 'var(--text)' }}>
-              Waiting for <strong>{them?.username}</strong> to take their turn…
+              Waiting for <strong>{them?.username}</strong> to take their turnï¿½
             </div>
             <button className="btn btn-ghost" onClick={onRefresh} style={{ padding: '6px 16px', fontSize: 12, marginTop: 8 }}>
               ? Refresh
