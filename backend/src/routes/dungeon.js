@@ -1,7 +1,7 @@
 const express = require('express');
 const { pool } = require('../db');
 const auth = require('../middleware/auth');
-const { addXP } = require('../utils/xp');
+const { addXP, addGold } = require('../utils/xp');
 const { ATTACKS, attackById, attacksForClass, DEFAULT_LOADOUT, defaultLoadoutFor } = require('../data/attacks');
 const { MONSTERS, monsterById, scaledMonster } = require('../data/monsters');
 const { generateMap, POTIONS, potionById } = require('../data/dungeon');
@@ -177,13 +177,11 @@ router.post('/reward', async (req, res) => {
     const xpMult   = 1 + ((bonuses.xp_pct   || 0) / 100);
     const goldMult = 1 + ((bonuses.gold_pct || 0) / 100);
     const finalXp   = Math.round(monster.xp   * xpMult);
-    const finalGold = Math.round(monster.gold * goldMult);
+    let finalGold = Math.round(monster.gold * goldMult);
 
     await addXP(req.userId, finalXp);
-    await pool.query(
-      'UPDATE users SET gold = gold + $1, lifetime_gold = COALESCE(lifetime_gold, 0) + $1 WHERE id = $2',
-      [finalGold, req.userId]
-    );
+    const goldRes = await addGold(req.userId, finalGold);
+    if (goldRes) finalGold = goldRes.granted;
     // Bumping ascension on every boss kill — surfaces on /auth/me for the
     // entrance-screen ascension chip and future difficulty modifiers.
     if (baseMonster.tier === 5) {
@@ -257,13 +255,11 @@ router.post('/survival/reward', async (req, res) => {
     const xpMult   = 1 + ((bonuses.xp_pct   || 0) / 100);
     const goldMult = 1 + ((bonuses.gold_pct || 0) / 100);
     const finalXp   = Math.round((monster.xp   || base.xp)   * xpMult);
-    const finalGold = Math.round((monster.gold || base.gold) * goldMult);
+    let   finalGold = Math.round((monster.gold || base.gold) * goldMult);
 
     await addXP(req.userId, finalXp);
-    await pool.query(
-      'UPDATE users SET gold = gold + $1, lifetime_gold = COALESCE(lifetime_gold, 0) + $1 WHERE id = $2',
-      [finalGold, req.userId]
-    );
+    const goldRes = await addGold(req.userId, finalGold);
+    if (goldRes) finalGold = goldRes.granted;
     // Update best wave if we just beat it.
     await pool.query(
       `UPDATE users SET best_survival_wave = GREATEST(COALESCE(best_survival_wave, 0), $1)
@@ -315,13 +311,11 @@ router.post('/treasure', async (req, res) => {
     const { tier } = req.body;
     const t = Math.max(1, Math.min(5, parseInt(tier) || 1));
     // Dungeon is a gold faucet by design — habits are still the XP grind.
-    const gold = 40 + t * 25 + Math.floor(Math.random() * 20);
-    await pool.query(
-      'UPDATE users SET gold = gold + $1, lifetime_gold = COALESCE(lifetime_gold, 0) + $1 WHERE id = $2',
-      [gold, req.userId]
-    );
+    const goldBase = 40 + t * 25 + Math.floor(Math.random() * 20);
+    const goldRes = await addGold(req.userId, goldBase);
+    const granted = goldRes?.granted ?? goldBase;
     const { rows } = await pool.query('SELECT gold FROM users WHERE id = $1', [req.userId]);
-    res.json({ gold, user: rows[0] });
+    res.json({ gold: granted, user: rows[0] });
   } catch (err) {
     console.error('dungeon/treasure error', err);
     res.status(500).json({ error: 'Server error' });

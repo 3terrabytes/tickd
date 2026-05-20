@@ -132,6 +132,16 @@ export default function Dashboard() {
             <div style={styles.playerTitle}>
               <span style={styles.levelBadge}>Lv.{currentLevel}</span>
               <span style={{ color: 'var(--text-muted)', fontSize: 13 }}>{levelTitle(currentLevel)}</span>
+              {user?.rebirth_count > 0 && (
+                <span title={`${(1 + 0.5 * user.rebirth_count).toFixed(1)}× XP & gold (permanent)`}
+                  style={{
+                    padding: '2px 8px', borderRadius: 99, fontSize: 11, fontWeight: 700,
+                    background: 'linear-gradient(90deg, #7c3aed, #ec4899)',
+                    color: 'white',
+                  }}>
+                  ♾ R{user.rebirth_count} · {(1 + 0.5 * user.rebirth_count).toFixed(1)}×
+                </span>
+              )}
               {user?.streak_shield && (
                 <span title="Your streak is protected from one missed day" style={styles.shieldChip}>
                   🛡️ Shield

@@ -209,7 +209,7 @@ router.post('/use/:itemId', async (req, res) => {
   );
   if (!rows.length) return res.status(403).json({ error: 'Not in inventory' });
 
-  const { addXP } = require('../utils/xp');
+  const { addXP, addGold } = require('../utils/xp');
   let result = {};
 
   if (item.id === 'potion_xp') {
@@ -219,8 +219,8 @@ router.post('/use/:itemId', async (req, res) => {
     await addXP(req.userId, 100);
     result = { xpGained: 100 };
   } else if (item.id === 'potion_gold') {
-    await pool.query('UPDATE users SET gold = gold + 500 WHERE id = $1', [req.userId]);
-    result = { goldGained: 500 };
+    const g = await addGold(req.userId, 500);
+    result = { goldGained: g?.granted ?? 500 };
   } else if (item.id === 'cake_birthday') {
     await addXP(req.userId, 1500);
     result = { xpGained: 1500, message: '🎂 Make a wish!' };
@@ -228,9 +228,8 @@ router.post('/use/:itemId', async (req, res) => {
     await addXP(req.userId, 3000);
     result = { xpGained: 3000, message: 'Reality bends.' };
   } else if (item.id === 'elixir_gold') {
-    // Grant 3x the user's current daily XP earn rate as bonus gold
-    await pool.query('UPDATE users SET gold = gold + 1000 WHERE id = $1', [req.userId]);
-    result = { goldGained: 1000 };
+    const g = await addGold(req.userId, 1000);
+    result = { goldGained: g?.granted ?? 1000 };
   } else if (item.id === 'scroll_streak') {
     await pool.query('UPDATE users SET streak_shield = true WHERE id = $1', [req.userId]);
     result = { shieldActive: true };

@@ -1,7 +1,7 @@
 const express = require('express');
 const { pool } = require('../db');
 const auth = require('../middleware/auth');
-const { calcXP, levelFromXP, xpForLevel } = require('../utils/xp');
+const { calcXP, levelFromXP, xpForLevel, addXP, addGold } = require('../utils/xp');
 const { checkAchievements } = require('./achievements');
 const router = express.Router();
 
@@ -99,19 +99,16 @@ router.post('/:id/complete', async (req, res) => {
     // Gold earned from habit's set reward
     const goldEarned = habit.gold_reward || 10;
 
-    // Update user XP, gold and level
-    const { rows: users } = await pool.query(
-      `UPDATE users SET xp = xp + $1, gold = gold + $2, lifetime_gold = lifetime_gold + $2
-       WHERE id = $3 RETURNING xp, level, gold`,
-      [xpEarned, goldEarned, req.userId]
-    );
-    const newXP = users[0].xp;
-    const newLevel = levelFromXP(newXP);
-    const leveledUp = newLevel > users[0].level;
-
-    if (leveledUp) {
-      await pool.query('UPDATE users SET level = $1 WHERE id = $2', [newLevel, req.userId]);
-    }
+    // Apply rebirth multiplier transparently via the helpers. addXP also
+    // handles level-up + milestone-banner grants for us.
+    const xpRes   = await addXP(req.userId, xpEarned);
+    const goldRes = await addGold(req.userId, goldEarned);
+    const newXP    = xpRes?.xp ?? 0;
+    const newLevel = xpRes?.level ?? 1;
+    // We need to know if this completion crossed a level boundary so the
+    // client can show the "LEVEL UP" banner. Re-derive from the returned XP.
+    const oldXp = newXP - (xpRes?.granted || 0);
+    const leveledUp = levelFromXP(oldXp) < newLevel;
 
     // Achievement check — never let a failure break habit completion
     let newAchievements = [];
@@ -122,11 +119,13 @@ router.post('/:id/complete', async (req, res) => {
     }
 
     res.json({
-      xpEarned,
-      goldEarned,
+      // Display the post-multiplier amounts so the floating "+XP / +Gold"
+      // toast reflects rebirth bonuses.
+      xpEarned:   xpRes?.granted   ?? xpEarned,
+      goldEarned: goldRes?.granted ?? goldEarned,
       newStreak,
       totalXP: newXP,
-      totalGold: users[0].gold,
+      totalGold: goldRes?.gold ?? 0,
       newLevel,
       leveledUp,
       xpForNextLevel: xpForLevel(newLevel + 1),

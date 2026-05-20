@@ -91,7 +91,7 @@ router.get('/me', require('../middleware/auth'), async (req, res) => {
       `SELECT id, username, email, xp, level, avatar_color, gold, avatar_skin, avatar_hair,
               avatar_eyes, avatar_hair_style, avatar_gender, avatar_beard, streak_shield,
               debrief_seen, created_at, is_admin, is_master_admin, admin_perms, dungeon_ascension,
-              best_survival_wave,
+              best_survival_wave, rebirth_count,
               suspension_type, suspension_reason, suspended_until, suspended_at, warning_seen
        FROM users WHERE id = $1`,
       [req.userId]
@@ -178,6 +178,60 @@ router.patch('/debrief-seen', require('../middleware/auth'), async (req, res) =>
   } catch (err) {
     console.error('Debrief seen error:', err);
     res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Rebirth — wipes XP/level/gold/inventory/equipped/dungeon-progress and
+// bumps rebirth_count. Earnings multiplier becomes 1.5x / 2.0x / 2.5x ...
+// Habits and friendships survive; achievements survive too (they reflect
+// permanent milestones across lives).
+router.post('/rebirth', require('../middleware/auth'), async (req, res) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const { rows } = await client.query(
+      'SELECT level, rebirth_count FROM users WHERE id = $1',
+      [req.userId]
+    );
+    const me = rows[0];
+    if (!me) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Not found' }); }
+    if ((me.level || 1) < 30) {
+      await client.query('ROLLBACK');
+      return res.status(403).json({ error: 'You must be Level 30 to rebirth.' });
+    }
+
+    const newRebirthCount = (me.rebirth_count || 0) + 1;
+
+    // Wipe progression-tied state. Achievements + friendships + habits stay.
+    await client.query('DELETE FROM user_inventory WHERE user_id = $1', [req.userId]);
+    await client.query('DELETE FROM user_equipped  WHERE user_id = $1', [req.userId]);
+    await client.query('DELETE FROM user_attacks   WHERE user_id = $1', [req.userId]);
+    await client.query(
+      `UPDATE users SET
+         xp = 0, level = 1, gold = 0,
+         lifetime_gold = 0,
+         rebirth_count = $1,
+         dungeon_ascension = 0,
+         best_survival_wave = 0,
+         streak_shield = false
+       WHERE id = $2`,
+      [newRebirthCount, req.userId]
+    );
+
+    await client.query('COMMIT');
+    const newMult = 1 + 0.5 * newRebirthCount;
+    res.json({
+      success: true,
+      rebirth_count: newRebirthCount,
+      multiplier: newMult,
+      message: `You are reborn. ${newMult.toFixed(1)}x XP and gold forever.`,
+    });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('rebirth error', err);
+    res.status(500).json({ error: 'Server error' });
+  } finally {
+    client.release();
   }
 });
 

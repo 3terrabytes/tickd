@@ -23,6 +23,7 @@ export const api = {
     changeUsername: (b) => req('PATCH', '/auth/username', b),
     changePassword: (b) => req('PATCH', '/auth/password', b),
     warningSeen: () => req('PATCH', '/auth/warning-seen'),
+    rebirth: () => req('POST', '/auth/rebirth'),
   },
   admin: {
     listUsers: () => req('GET', '/admin/users'),

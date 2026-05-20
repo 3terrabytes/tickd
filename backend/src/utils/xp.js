@@ -43,38 +43,65 @@ const LEVEL_REWARD_BANNERS = {
   100: 'banner_incarnate',
 };
 
-// Add XP to a user, level them up if needed, and grant any milestone-reward
-// banners they cross. Returns nothing — the caller refetches /me to see
-// the new state.
+// Rebirth multiplier — multiplier on all earned XP and gold.
+// 0 rebirths = 1x, 1 = 1.5x, 2 = 2.0x, ... +0.5x per rebirth.
+const rebirthMult = (rebirthCount) => 1 + 0.5 * (rebirthCount || 0);
+
+// Add XP to a user. Applies the rebirth multiplier in SQL so every call
+// site benefits transparently. Levels up if needed, grants milestone-reward
+// banners on threshold crossings, and returns the actual granted amount.
 const addXP = async (userId, amount) => {
   const { pool } = require('../db');
+  if (!amount || amount <= 0) return null;
   const { rows } = await pool.query(
-    'UPDATE users SET xp = xp + $1 WHERE id = $2 RETURNING xp, level',
+    `UPDATE users
+     SET xp = xp + GREATEST(0, ROUND($1::numeric * (1 + 0.5 * COALESCE(rebirth_count, 0))))::int
+     WHERE id = $2
+     RETURNING xp, level,
+       GREATEST(0, ROUND($1::numeric * (1 + 0.5 * COALESCE(rebirth_count, 0))))::int AS granted`,
     [amount, userId]
   );
-  if (!rows.length) return;
+  if (!rows.length) return null;
   const oldLevel = rows[0].level;
   const newLevel = levelFromXP(rows[0].xp);
   if (newLevel > oldLevel) {
     await pool.query('UPDATE users SET level = $1 WHERE id = $2', [newLevel, userId]);
-
-    // Check every threshold the user just crossed (level may jump multiple).
     for (const [thresholdStr, itemId] of Object.entries(LEVEL_REWARD_BANNERS)) {
       const threshold = parseInt(thresholdStr);
       if (newLevel >= threshold && oldLevel < threshold) {
         try {
           await pool.query(
-            `INSERT INTO user_inventory (user_id, item_id)
-             VALUES ($1, $2)
+            `INSERT INTO user_inventory (user_id, item_id) VALUES ($1, $2)
              ON CONFLICT (user_id, item_id) DO NOTHING`,
             [userId, itemId]
           );
         } catch (err) {
-          console.error(`Level-reward grant failed: L${threshold} → ${itemId}`, err);
+          console.error(`Level-reward grant failed: L${threshold} -> ${itemId}`, err);
         }
       }
     }
   }
+  return { granted: rows[0].granted, xp: rows[0].xp, level: newLevel };
 };
 
-module.exports = { xpForLevel, levelFromXP, calcXP, levelTitle, addXP, LEVEL_REWARD_BANNERS };
+// Add gold to a user, applying the rebirth multiplier in SQL. Updates the
+// lifetime_gold counter at the same time. Returns the actual granted amount
+// so callers can log/display the post-multiplier value.
+const addGold = async (userId, amount) => {
+  const { pool } = require('../db');
+  if (!amount || amount <= 0) return null;
+  const { rows } = await pool.query(
+    `UPDATE users
+     SET gold          = gold + GREATEST(0, ROUND($1::numeric * (1 + 0.5 * COALESCE(rebirth_count, 0))))::int,
+         lifetime_gold = COALESCE(lifetime_gold, 0)
+                       + GREATEST(0, ROUND($1::numeric * (1 + 0.5 * COALESCE(rebirth_count, 0))))::int
+     WHERE id = $2
+     RETURNING gold,
+       GREATEST(0, ROUND($1::numeric * (1 + 0.5 * COALESCE(rebirth_count, 0))))::int AS granted`,
+    [amount, userId]
+  );
+  if (!rows.length) return null;
+  return { granted: rows[0].granted, gold: rows[0].gold };
+};
+
+module.exports = { xpForLevel, levelFromXP, calcXP, levelTitle, addXP, addGold, rebirthMult, LEVEL_REWARD_BANNERS };

@@ -165,6 +165,11 @@ const initDB = async () => {
     -- Best wave reached in Survival Mode (the endless dungeon).
     ALTER TABLE users ADD COLUMN IF NOT EXISTS best_survival_wave INTEGER DEFAULT 0;
 
+    -- Rebirth system: each rebirth wipes XP/level/gold/inventory but grants
+    -- a permanent earnings multiplier. mult = 1 + 0.5 * rebirth_count
+    -- (0 rebirths = 1x, 1 = 1.5x, 2 = 2.0x, ...).
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS rebirth_count INTEGER DEFAULT 0;
+
     -- Half-admin permission system. is_admin stays as the full-admin flag
     -- (all perms implicit). admin_perms is a granular list for half-admins.
     -- is_master_admin is the highest tier -- only they can grant/revoke

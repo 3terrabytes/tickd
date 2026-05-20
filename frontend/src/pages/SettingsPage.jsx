@@ -198,6 +198,15 @@ export default function SettingsPage() {
         />
       </Section>
 
+      {/* REBIRTH â€” permanent earnings multiplier, wipes most progress. */}
+      <Section title="â™¾ Rebirth">
+        <RebirthCard
+          user={user}
+          refreshUser={refreshUser}
+          onToast={(m, t) => showToast(m, t)}
+        />
+      </Section>
+
       <button className="btn btn-primary" style={{ padding:'14px', fontSize:15 }} onClick={save} disabled={saving}>
         {saving ? 'Saving...' : 'Save Settings'}
       </button>
@@ -374,3 +383,101 @@ const fieldStyle = {
   outline: 'none',
   boxSizing: 'border-box',
 };
+
+
+// -- Rebirth — Level 30 gate, wipes XP/level/gold/inventory/dungeon-state --
+function RebirthCard({ user, refreshUser, onToast }) {
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy]             = useState(false);
+  const level   = user?.level || 1;
+  const count   = user?.rebirth_count || 0;
+  const curMult = 1 + 0.5 * count;
+  const nextMult = curMult + 0.5;
+  const canRebirth = level >= 30;
+
+  const doRebirth = async () => {
+    setBusy(true);
+    try {
+      const res = await api.auth.rebirth();
+      onToast(res.message || 'Reborn.');
+      setConfirming(false);
+      await refreshUser();
+    } catch (err) {
+      onToast(err.message || 'Rebirth failed', 'error');
+    }
+    setBusy(false);
+  };
+
+  return (
+    <div>
+      <div style={{
+        display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14,
+      }}>
+        <div style={{ background: 'var(--bg3)', borderRadius: 10, padding: '10px 12px' }}>
+          <div style={{ fontSize: 10, color: 'var(--text-muted)', letterSpacing: '0.06em', fontWeight: 600 }}>REBIRTHS</div>
+          <div style={{ fontFamily: 'Cinzel,serif', fontSize: 22, color: '#a78bfa' }}>{count}</div>
+        </div>
+        <div style={{ background: 'var(--bg3)', borderRadius: 10, padding: '10px 12px' }}>
+          <div style={{ fontSize: 10, color: 'var(--text-muted)', letterSpacing: '0.06em', fontWeight: 600 }}>CURRENT MULTIPLIER</div>
+          <div style={{ fontFamily: 'Cinzel,serif', fontSize: 22, color: '#fde047' }}>{curMult.toFixed(1)}× XP &amp; Gold</div>
+        </div>
+      </div>
+
+      <p style={{ color: 'var(--text-muted)', fontSize: 13, marginBottom: 8 }}>
+        Rebirth at <strong style={{ color: 'var(--text)' }}>Level 30</strong> to wipe your XP, level,
+        gold, inventory, and dungeon progress in exchange for a permanent <strong style={{ color: '#fde047' }}>
+        +0.5× earnings multiplier</strong>. Habits, friends, and achievements survive.
+      </p>
+      <p style={{ color: 'var(--text-muted)', fontSize: 12, marginBottom: 14 }}>
+        Next rebirth would give you <strong style={{ color: '#fde047' }}>{nextMult.toFixed(1)}× XP &amp; gold</strong>.
+      </p>
+
+      {!confirming ? (
+        <button onClick={() => setConfirming(true)}
+          disabled={!canRebirth}
+          className="btn btn-primary"
+          style={{
+            padding: '10px 22px', fontSize: 14,
+            background: canRebirth
+              ? 'linear-gradient(90deg, #7c3aed, #ec4899)'
+              : 'var(--bg3)',
+            borderColor: canRebirth ? '#a78bfa' : 'var(--border)',
+            opacity: canRebirth ? 1 : 0.55,
+          }}>
+          {canRebirth
+            ? `? Rebirth (gain ${nextMult.toFixed(1)}× earnings)`
+            : `?? Reach Level 30 (${30 - level} to go)`}
+        </button>
+      ) : (
+        <div style={{
+          padding: 14, borderRadius: 10,
+          background: 'rgba(127,29,29,0.18)',
+          border: '1px solid #ef444466',
+        }}>
+          <div style={{ fontFamily: 'Cinzel,serif', fontSize: 15, color: '#fca5a5', marginBottom: 6 }}>
+            ? This will wipe a LOT of progress.
+          </div>
+          <ul style={{ margin: '4px 0 12px 18px', padding: 0, color: 'var(--text-muted)', fontSize: 12, lineHeight: 1.5 }}>
+            <li>Resets XP to 0, level to 1, gold to 0.</li>
+            <li>Deletes every item in your inventory and unequips everything.</li>
+            <li>Resets dungeon ascension and best survival wave.</li>
+            <li>Streak shield is lost.</li>
+            <li>Habits, friends, and achievements <strong>stay</strong>.</li>
+            <li>Earnings multiplier becomes <strong style={{ color: '#fde047' }}>{nextMult.toFixed(1)}×</strong> permanently.</li>
+          </ul>
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+            <button className="btn btn-ghost" onClick={() => setConfirming(false)}
+              style={{ padding: '8px 16px', fontSize: 13 }}>
+              Cancel
+            </button>
+            <button onClick={doRebirth} disabled={busy}
+              className="btn btn-primary"
+              style={{ padding: '8px 18px', fontSize: 13, background: '#7f1d1d', borderColor: '#ef4444' }}>
+              {busy ? 'Reborn…' : 'Yes, REBIRTH'}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
