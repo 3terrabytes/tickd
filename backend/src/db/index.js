@@ -162,10 +162,10 @@ const initDB = async () => {
     -- Surfaced on /auth/me and used to gate harder difficulties.
     ALTER TABLE users ADD COLUMN IF NOT EXISTS dungeon_ascension INTEGER DEFAULT 0;
 
-    -- Half-admin permission system. `is_admin` stays as the "full admin"
-    -- flag (all perms implicit). `admin_perms` is a granular list for
-    -- half-admins. `is_master_admin` is the highest tier — only they can
-    -- grant/revoke admin powers and view the audit log.
+    -- Half-admin permission system. is_admin stays as the full-admin flag
+    -- (all perms implicit). admin_perms is a granular list for half-admins.
+    -- is_master_admin is the highest tier -- only they can grant/revoke
+    -- admin powers and view the audit log.
     ALTER TABLE users ADD COLUMN IF NOT EXISTS admin_perms     TEXT[];
     ALTER TABLE users ADD COLUMN IF NOT EXISTS is_master_admin BOOLEAN DEFAULT false;
 
